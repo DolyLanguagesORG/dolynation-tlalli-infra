@@ -1,0 +1,36 @@
+name: infra
+
+on:
+  # Sin filtro de `paths`: los checks exigidos por la protección de ramas
+  # deben reportar siempre.
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compose-validate:
+    name: compose-validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # docker-compose.prod.yml referencia ./backend (un clone del repo de
+      # backend). Se clona para que `docker compose config` pueda resolver
+      # el contexto de build.
+      - name: Clonar el backend
+        run: git clone --depth 1 https://github.com/DolyLanguagesORG/dolynation-atl-back.git backend
+
+      - name: Validar docker-compose.test.yml
+        run: docker compose -f docker-compose.test.yml config
+
+      - name: Validar docker-compose.prod.yml
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dolynglish
+        run: docker compose -f docker-compose.prod.yml config

@@ -1,0 +1,10 @@
+# Entorno
+.env
+.env.local
+*.env
+
+# Backend clonado para el build de producción (ver Makefile)
+/backend/
+
+# Estado local
+*.log
