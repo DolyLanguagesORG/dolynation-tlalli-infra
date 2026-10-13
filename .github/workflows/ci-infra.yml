@@ -28,6 +28,13 @@ jobs:
       - name: Validar docker-compose.test.yml
         run: docker compose -f docker-compose.test.yml config
 
+      - name: Validar docker-compose.dev.yml
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dolynglish
+        run: docker compose -f docker-compose.dev.yml config
+
       - name: Validar docker-compose.prod.yml
         env:
           POSTGRES_USER: postgres

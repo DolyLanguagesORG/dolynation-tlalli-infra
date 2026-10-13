@@ -1,0 +1,58 @@
+name: deploy-dev
+
+# Deploy del stack de desarrollo (Postgres + backend + frontend) al servidor.
+# Se dispara cuando cambia algo que afecta a DEV. `versions.yaml` (staging/prod)
+# queda fuera de forma intencional: NO es parte de este workflow.
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'docker-compose.dev.yml'
+      - 'scripts/**'
+      - 'database/**'
+      - '.env.dev.example'
+      - '.github/workflows/deploy-dev.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-dev-infra
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Desplegar stack de desarrollo
+    runs-on: ubuntu-latest
+    environment: desarrollo
+    # Un push hecho por el propio bot no debe re-disparar el deploy.
+    if: github.event_name == 'workflow_dispatch' || github.event.pusher.name != 'github-actions[bot]'
+    steps:
+      - name: Instalar llave SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${{ secrets.DEPLOY_PORT }}" "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Escribir .env de la base de datos en el servidor
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+        run: |
+          set -euo pipefail
+          CONTENT="$(printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\n' \
+            "$POSTGRES_USER" "$POSTGRES_PASSWORD" "$POSTGRES_DB" | base64 -w0)"
+          echo "$CONTENT" | ssh -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT }}" \
+            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "base64 -d > '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/.env'"
+
+      - name: Actualizar infra y levantar el stack
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT }}" \
+            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "set -e; cd '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra'; git fetch --prune origin; git reset --hard origin/develop; git clean -fdq; docker compose -f docker-compose.dev.yml up -d"

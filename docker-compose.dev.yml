@@ -1,0 +1,77 @@
+# Stack de DESARROLLO — DolyNation
+#
+# Levanta los 3 contenedores del entorno de desarrollo en un único host
+# (servidor self-host), conectados por la red `doly-dev-net`:
+#
+#   db       (Postgres)  → localhost:57010
+#   backend  (NestJS)    → localhost:57011   (modo watch)
+#   frontend (Next.js)   → localhost:57012   (modo watch)
+#
+# El código de `backend` y `frontend` se monta desde sus clones hermanos
+# (`../dolynation-atl-back` y `../dolynation-tonatiuh-front`). Cada app lee
+# su propio `.env` montado, así que un `docker restart` recarga variables.
+#
+# NO se usan imágenes de registry aquí: eso es staging/producción.
+
+name: doly-dev
+
+services:
+  db:
+    image: postgres:15
+    container_name: doly-dev-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "57010:5432"
+    volumes:
+      - doly-dev-pgdata:/var/lib/postgresql/data
+      - ./database/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - doly-dev-net
+
+  backend:
+    image: node:22-bookworm
+    container_name: doly-dev-backend
+    restart: unless-stopped
+    working_dir: /app
+    command: sh -lc '[ -d node_modules ] || npm ci --no-audit --no-fund; exec npm run start:dev'
+    volumes:
+      - ../dolynation-atl-back:/app
+    ports:
+      - "57011:3333"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - doly-dev-net
+
+  frontend:
+    image: node:22-bookworm
+    container_name: doly-dev-frontend
+    restart: unless-stopped
+    working_dir: /app
+    command: sh -lc '[ -d node_modules ] || npm ci --no-audit --no-fund; exec npm run dev -- -H 0.0.0.0'
+    volumes:
+      - ../dolynation-tonatiuh-front:/app
+    ports:
+      - "57012:3000"
+    depends_on:
+      - backend
+    networks:
+      - doly-dev-net
+
+volumes:
+  doly-dev-pgdata:
+
+networks:
+  doly-dev-net:
+    name: doly-dev-net
+    driver: bridge
