@@ -19,9 +19,11 @@ datos).
 └── database/
     └── postgres/
         ├── 01-init.sql                 # Schema completo (se aplica al primer arranque)
-        └── updates/                    # Cambios post-primer-deploy a prod
+        └── updates/                    # Cambios incrementales idempotentes
             ├── README.md               # Convención de updates (idempotencia, naming)
-            └── YYYY-MM-DD_*.sql        # ALTERs cronológicos
+            ├── 02-sprint2-study-config.sql
+            ├── 03-sprint3-evaluations-vocabulary.sql
+            └── 04-sprint4-admin-role.sql
 ```
 
 ## Levantar Postgres para desarrollo / tests
@@ -115,11 +117,15 @@ vuelve a aplicar.
 
 ### Cambios al schema: regla de dos fases
 
-- **Mientras `prod` no se ha desplegado** (estamos en dev puro):
-  editar directamente `01-init.sql` con el estado final deseado.
-- **Después del primer deploy a `prod`**: NO editar `01-init.sql`;
-  crear archivos `updates/YYYY-MM-DD_<nombre>.sql` con `ALTER`s
-  idempotentes. Se aplican en orden alfabético (= cronológico).
+- **Antes del primer deploy real a `prod`:** `01-init.sql` y `updates/`
+  se mantienen sincronizados. Las bases nuevas usan `01-init.sql`; los
+  updates se prueban aparte para validar la ruta de migración.
+- **Después del primer deploy real a `prod`:** `01-init.sql` se congela;
+  todo cambio va en `updates/NN-<nombre>.sql` con `ALTER`s idempotentes,
+  en orden numérico.
+
+Los updates de S2, S3 y S4 (`02`, `03`, `04`) ya están planificados en los
+issues `infra#20`, `infra#21` e `infra#22`.
 
 Detalles completos en
 [`database/postgres/updates/README.md`](./database/postgres/updates/README.md)
