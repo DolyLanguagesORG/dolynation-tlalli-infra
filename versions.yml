@@ -1,0 +1,21 @@
+# Manifiesto de versiones de DolyNation.
+#
+# Fuente de verdad de qué versión está publicada en cada repositorio.
+# Se actualiza en el mismo pull request que prepara la release (infra#4), junto
+# con la sección del CHANGELOG.md y el campo "version" de los package.json.
+#
+# Formato: <repo>: <semver>  (sin prefijo "v")
+project: dolynation
+updated: 2026-10-20
+
+repositories:
+  dolynation-atl-back: 0.1.0
+  dolynation-tonatiuh-front: 0.1.1
+  dolynation-tlalli-infra: 0.1.0
+  dolynation-ehecatl-docs: 0.1.0
+
+# La entrega v1.0.0 se publica en los cuatro repositorios el mismo día.
+release:
+  current: 0.1.0
+  target: 1.0.0
+  deadline: 2026-12-10
