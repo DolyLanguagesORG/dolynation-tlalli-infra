@@ -20,7 +20,7 @@ jobs:
     name: compose-validate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # docker-compose.prod.yml referencia ./backend (un clone del repo de
       # backend). Se clona para que `docker compose config` pueda resolver
@@ -66,7 +66,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # El schema es la fuente de verdad de la base de datos: este job
       # comprueba que 01-init.sql y los updates/ pendientes son sintacticamente
