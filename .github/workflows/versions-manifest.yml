@@ -43,23 +43,32 @@ jobs:
             exit 1
           fi
 
-          # Formato: <repo>: <semver>
           echo "Contenido del manifiesto:"
           cat versions.yml
           echo ""
+
+          # Solo se validan las entradas de la seccion 'repositories:'. Las
+          # demas claves (project, updated, release) tienen otra forma.
+          entries="$(awk '
+            /^repositories:/ { in_section = 1; next }
+            /^[^[:space:]]/ { in_section = 0 }
+            in_section && /^[[:space:]]+[a-z0-9-]+:[[:space:]]+/ { print }
+          ' versions.yml)"
+
+          if [ -z "$entries" ]; then
+            echo "::error::No se encontraron entradas en la sección 'repositories:'."
+            exit 1
+          fi
 
           bad=0
           while IFS= read -r line; do
             repo="$(echo "$line" | cut -d: -f1 | tr -d ' ')"
             version="$(echo "$line" | cut -d: -f2 | tr -d ' ')"
-            case "$repo" in
-              repositories|release|project|updated|"") continue ;;
-            esac
             if ! echo "$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
               echo "::error::La versión de '$repo' no es válida: '$version'. Usa el formato X.Y.Z."
               bad=1
             fi
-          done < <(grep -E '^\s+[a-z-]+:\s' versions.yml)
+          done <<< "$entries"
 
           if [ "$bad" -ne 0 ]; then
             exit 1
@@ -76,16 +85,19 @@ jobs:
           # Comprueba que cada repositorio tenga el tag de la versión que el
           # manifiesto declara. Si un repo todavía no lo tiene, el manifiesto
           # se está adelantando a la release.
+          entries="$(awk '
+            /^repositories:/ { in_section = 1; next }
+            /^[^[:space:]]/ { in_section = 0 }
+            in_section && /^[[:space:]]+[a-z0-9-]+:[[:space:]]+/ { print }
+          ' versions.yml)"
+
           while IFS= read -r line; do
             repo="$(echo "$line" | cut -d: -f1 | tr -d ' ')"
             version="$(echo "$line" | cut -d: -f2 | tr -d ' ')"
-            case "$repo" in
-              repositories|release|project|updated|"") continue ;;
-            esac
             if ! gh api "repos/DolyLanguagesORG/$repo/git/ref/tags/v$version" >/dev/null 2>&1; then
               echo "::warning::El repositorio '$repo' todavía no tiene el tag 'v$version'."
               echo "::warning::El manifiesto puede estar adelantado a la release."
             else
               echo "$repo: v$version existe."
             fi
-          done < <(grep -E '^\s+[a-z-]+:\s' versions.yml)
+          done <<< "$entries"
