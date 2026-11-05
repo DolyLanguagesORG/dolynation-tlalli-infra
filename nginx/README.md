@@ -36,8 +36,8 @@ habla TLS con el origen**, y el certificado de origen no sale del servidor.
 sudo mkdir -p /etc/ssl/dolynation
 sudo openssl req -new -newkey rsa:2048 -nodes \
   -keyout /tmp/origin.key -out /etc/ssl/dolynation/origin.csr \
-  -subj "/CN=devweb.yakatercos.tech" \
-  -addext "subjectAltName=DNS:devweb.yakatercos.tech,DNS:devapi.yakatercos.tech"
+  -subj "/CN=devweb.yacaterkos.tech" \
+  -addext "subjectAltName=DNS:devweb.yacaterkos.tech,DNS:devapi.yacaterkos.tech"
 
 # 2. En el panel de Cloudflare: SSL/TLS > Origin Server > Create Certificate
 #    (pegar el CSR, tipo RSA, validez 15 anos). Guardar el .pem como:
