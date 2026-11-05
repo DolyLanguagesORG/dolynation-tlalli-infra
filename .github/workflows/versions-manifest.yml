@@ -1,0 +1,103 @@
+name: versions-manifest
+
+# Se dispara cuando cambia el manifiesto de versiones. Es el punto de
+# enganche del despliegue por tags exactos: cuando este workflow detects un
+# cambio en `versions.yml`, ya sabe qué versión va en cada repositorio.
+#
+# Hoy NO despliega: el despliegue por SHA con rollback es `infra#27`, que
+# sigue sin implementarse. Este workflow solo valida y avisa, para que el
+# enganche exista antes de que lo demás esté listo.
+#
+# Ver operations/CI-CD-Y-VERSIONADO.md y conventions/versioning.md.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'versions.yml'
+  pull_request:
+    paths:
+      - 'versions.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validar el manifiesto
+        run: |
+          set -euo pipefail
+
+          if [ ! -f versions.yml ]; then
+            echo "::error::No se encuentra versions.yml"
+            exit 1
+          fi
+
+          echo "Contenido del manifiesto:"
+          cat versions.yml
+          echo ""
+
+          # Solo se validan las entradas de la seccion 'repositories:'. Las
+          # demas claves (project, updated, release) tienen otra forma.
+          entries="$(awk '
+            /^repositories:/ { in_section = 1; next }
+            /^[^[:space:]]/ { in_section = 0 }
+            in_section && /^[[:space:]]+[a-z0-9-]+:[[:space:]]+/ { print }
+          ' versions.yml)"
+
+          if [ -z "$entries" ]; then
+            echo "::error::No se encontraron entradas en la sección 'repositories:'."
+            exit 1
+          fi
+
+          bad=0
+          while IFS= read -r line; do
+            repo="$(echo "$line" | cut -d: -f1 | tr -d ' ')"
+            version="$(echo "$line" | cut -d: -f2 | tr -d ' ')"
+            if ! echo "$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error::La versión de '$repo' no es válida: '$version'. Usa el formato X.Y.Z."
+              bad=1
+            fi
+          done <<< "$entries"
+
+          if [ "$bad" -ne 0 ]; then
+            exit 1
+          fi
+
+          echo "Manifiesto con formato válido."
+
+      - name: Comprobar que la versión declarada existe como tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # Comprueba que cada repositorio tenga el tag de la versión que el
+          # manifiesto declara. Si un repo todavía no lo tiene, el manifiesto
+          # se está adelantando a la release.
+          entries="$(awk '
+            /^repositories:/ { in_section = 1; next }
+            /^[^[:space:]]/ { in_section = 0 }
+            in_section && /^[[:space:]]+[a-z0-9-]+:[[:space:]]+/ { print }
+          ' versions.yml)"
+
+          while IFS= read -r line; do
+            repo="$(echo "$line" | cut -d: -f1 | tr -d ' ')"
+            version="$(echo "$line" | cut -d: -f2 | tr -d ' ')"
+            if ! gh api "repos/DolyLanguagesORG/$repo/git/ref/tags/v$version" >/dev/null 2>&1; then
+              echo "::warning::El repositorio '$repo' todavía no tiene el tag 'v$version'."
+              echo "::warning::El manifiesto puede estar adelantado a la release."
+            else
+              echo "$repo: v$version existe."
+            fi
+          done <<< "$entries"

@@ -1,12 +1,19 @@
 # Manifiesto de versiones de DolyNation.
 #
 # Fuente de verdad de qué versión está publicada en cada repositorio.
+#
 # Se actualiza en el mismo pull request que prepara la release (infra#4), junto
 # con la sección del CHANGELOG.md y el campo "version" de los package.json.
+# Ningún workflow puede escribirlo: la rama está protegida.
+#
+# El workflow `versions-manifest.yml` valida este archivo en cada PR que lo
+# toca y avisa si algún repositorio todavía no tiene el tag declarado. Es el
+# punto de enganche del despliegue por tags exactos; el despliegue en sí es
+# `infra#27` y todavía no está implementado.
 #
 # Formato: <repo>: <semver>  (sin prefijo "v")
 project: dolynation
-updated: 2026-10-20
+updated: 2026-11-04
 
 repositories:
   dolynation-atl-back: 0.1.0
@@ -15,7 +22,12 @@ repositories:
   dolynation-ehecatl-docs: 0.1.0
 
 # La entrega v1.0.0 se publica en los cuatro repositorios el mismo día.
+#
+# Fechas: el desarrollo termina el 06-dic para dejar margen; del 07 al 10-dic
+# se reserva para la release, las capturas y la presentación. El 10-dic es el
+# límite literal de la entrega.
 release:
   current: 0.1.0
   target: 1.0.0
+  development-deadline: 2026-12-06
   deadline: 2026-12-10
