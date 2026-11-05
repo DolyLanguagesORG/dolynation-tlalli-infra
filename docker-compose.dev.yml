@@ -3,9 +3,13 @@
 # Levanta los 3 contenedores del entorno de desarrollo en un único host
 # (servidor self-host), conectados por la red `doly-dev-net`:
 #
-#   db       (Postgres)  → localhost:57010
-#   backend  (NestJS)    → localhost:57011   (modo watch)
-#   frontend (Next.js)   → localhost:57012   (modo watch)
+#   db       (Postgres)  → 127.0.0.1:57010  (solo local)
+#   backend  (NestJS)    → 127.0.0.1:57011  (modo watch, solo local)
+#   frontend (Next.js)   → 127.0.0.1:57012  (modo watch, solo local)
+#
+# Los puertos se publican solo en la interfaz loopback: el proxy del
+# servidor es el unico que llega a ellos. Publicarlos en 0.0.0.0 dejaria
+# PostgreSQL accesible desde internet.
 #
 # El código de `backend` y `frontend` se monta desde sus clones hermanos
 # (`../dolynation-atl-back` y `../dolynation-tonatiuh-front`). Cada app lee
@@ -25,7 +29,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "57010:5432"
+      # Solo local: el proxy del servidor es quien llega a la base de datos.
+      # Publicarlo en 0.0.0.0 deja PostgreSQL accesible desde internet.
+      - "127.0.0.1:57010:5432"
     volumes:
       - doly-dev-pgdata:/var/lib/postgresql/data
       - ./database/postgres:/docker-entrypoint-initdb.d:ro
@@ -46,7 +52,8 @@ services:
     volumes:
       - ../dolynation-atl-back:/app
     ports:
-      - "57011:3333"
+      # Solo local: lo consume el proxy y el healthcheck del deploy.
+      - "127.0.0.1:57011:3333"
     depends_on:
       db:
         condition: service_healthy
@@ -62,7 +69,8 @@ services:
     volumes:
       - ../dolynation-tonatiuh-front:/app
     ports:
-      - "57012:3000"
+      # Solo local: lo consume el proxy.
+      - "127.0.0.1:57012:3000"
     depends_on:
       - backend
     networks:

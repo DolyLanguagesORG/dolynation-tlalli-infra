@@ -6,12 +6,14 @@
 # Vive en el repo `infra` (no en el repo que resetea), así que el
 # `git reset --hard` no sobrescribe este script mientras corre.
 #
+# El directorio por defecto es /srv/doly/dev/ en el servidor de despliegue.
+#
 # Flujo: pull de `develop` → `npm ci` si cambió el lock → `docker restart`
 # → healthcheck. El contenedor corre en watch y lee su propio `.env` montado,
 # por eso basta el restart para recargar código y variables.
 set -euo pipefail
 
-ORG_DIR="${ORG_DIR:-/home/mishistema/projects/DolyLanguagesORG}"
+ORG_DIR="${ORG_DIR:-/srv/doly/dev}"
 REPO="${REPO:-$ORG_DIR/dolynation-atl-back}"
 CONTAINER="${CONTAINER:-doly-dev-backend}"
 HEALTH_URL="${HEALTH_URL:-http://localhost:57011/api/v1/health/ready}"
