@@ -17,6 +17,9 @@ on:
 
 permissions:
   contents: read
+  # GitHub actualiza el estado del deployment automaticamente; sin este
+  # permiso el GITHUB_TOKEN es de solo lectura y no puede reportarlo.
+  deployments: write
 
 concurrency:
   group: deploy-dev-infra
@@ -134,3 +137,4 @@ jobs:
             -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             "set -e; cd '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra'; git fetch --prune origin; git reset --hard origin/develop; git clean -fdq; docker compose -f docker-compose.dev.yml up -d"
+
