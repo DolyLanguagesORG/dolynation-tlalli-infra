@@ -3,7 +3,7 @@ updated: '2026-10-20'
 repositories:
   dolynation-atl-back: 0.1.0
   dolynation-tonatiuh-front: 0.1.1
-  dolynation-tlalli-infra: 0.1.0
+  dolynation-tlalli-infra: 0.2.0
   dolynation-ehecatl-docs: 0.1.0
 release:
   current: 0.1.0

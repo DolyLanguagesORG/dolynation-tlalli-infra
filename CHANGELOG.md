@@ -8,6 +8,21 @@ versionado es [SemVer](https://semver.org/lang/es/).
 La **versión se declara en el `CHANGELOG.md`**: el workflow `release.yml` exige
 que exista la sección de la versión que se va a publicar antes de crear el tag.
 
+## [0.2.0](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.1.0...v0.2.0) (2026-11-06)
+
+
+### Features
+
+* **nginx:** anadir el proxy inverso de los entornos ([#37](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/37)) ([358f180](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/358f1803d3d5a8c58ed1ba1a5148a6c989f63a16))
+
+
+### Bug Fixes
+
+* **ci:** compartir el agente SSH entre todos los pasos del workflow ([#38](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/38)) ([e941a6f](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/e941a6fa5b34b5b12501ffb7bb59d558dd9f74bb))
+* **ci:** reportar el estado del deployment a GitHub ([#39](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/39)) ([cc2ae22](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/cc2ae2218bb0f1b516ce0d99fe93289933e590d1))
+* **deploy:** preparar el servidor nuevo y desplegar con la llave cifrada ([#36](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/36)) ([5a85760](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/5a8576034a745af69d2bcfdde8a8a96595c80cbc))
+* **nginx:** corregir el dominio a yacaterkos.tech ([#41](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/41)) ([956139a](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/956139af859a5f05efda157e6461fdae7a53a44a))
+
 ## [No publicado]
 
 ### Añadido
