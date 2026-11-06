@@ -56,6 +56,31 @@ else
 fi
 echo "$LOCK_HASH" > "$LOCK_STAMP"
 
+# La API expone la version y el commit del build que corre. En desarrollo no
+# se usa una imagen con ARG GIT_COMMIT (el contenedor corre el codigo montado),
+# asi que se inyectan aqui en el `.env` que el contenedor ya lee.
+#
+# - GIT_COMMIT: el SHA exacto que quedo desplegado.
+# - APP_VERSION: la version declarada en el package.json de ese commit, que es
+#   la que release-please mantiene al dia en `develop`.
+#
+# Se leen del codigo ya desplegado, no del remoto, para que coincidan con lo
+# que esta corriendo de verdad. La version se lee dentro del contenedor: el
+# host de despliegue no tiene node instalado.
+#
+# El `.env` lo regenera el workflow justo antes de llamar a este script, asi
+# que se le anaden estas dos lineas al final (el archivo es del usuario
+# `ddeploy`, que es quien ejecuta el script).
+GIT_COMMIT_SHA="$(git rev-parse HEAD)"
+APP_VERSION_VALUE="$(docker exec "$CONTAINER" node -p "require('/app/package.json').version" 2>/dev/null || echo '')"
+
+if [ -n "$APP_VERSION_VALUE" ]; then
+  log "Inyectando GIT_COMMIT=$GIT_COMMIT_SHA APP_VERSION=$APP_VERSION_VALUE"
+  printf 'GIT_COMMIT=%s\nAPP_VERSION=%s\n' "$GIT_COMMIT_SHA" "$APP_VERSION_VALUE" >> "$REPO/.env"
+else
+  log "No se pudo leer la version del package.json: se deja la que hubiera"
+fi
+
 log "Reiniciando $CONTAINER"
 docker restart "$CONTAINER"
 

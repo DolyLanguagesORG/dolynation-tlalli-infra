@@ -21,7 +21,16 @@ jobs:
       - name: Validate Conventional Commits title
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
+          # Dependabot genera sus propios titulos (`chore(deps): bump ...`),
+          # que ya cumplen el formato. Ademas sus ramas no las elige una
+          # persona, asi que la validacion de rama no aplica.
+          if [ "$PR_AUTHOR" = "dependabot[bot]" ]; then
+            echo "PR de Dependabot: se omite la validacion del titulo."
+            exit 0
+          fi
+
           # Este repo no tiene un paquete de Conventional Commits instalado
           # en el workflow, así que validamos con una regex equivalente a
           # @commitlint/config-conventional sobre el tipo y el scope.
@@ -55,7 +64,34 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.ref }}
           HEAD: ${{ github.event.pull_request.head.ref }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
+          # Dependabot crea sus ramas con su propio nombre
+          # (`dependabot/npm_and_yarn/...`), que no sigue la convencion del
+          # equipo y no se puede renombrar desde el bot. Se exime de la
+          # validacion de la rama origen; la base y los demas checks siguen
+          # aplicandose.
+          if [ "$PR_AUTHOR" = "dependabot[bot]" ]; then
+            echo "PR de Dependabot: se omite la validacion de la rama origen."
+            exit 0
+          fi
+
+          # release-please crea la rama del PR de release con su propio
+          # nombre (`release-please--branches--develop--components--<pkg>`),
+          # que no sigue la convencion del equipo. Ese PR lo genera la
+          # maquinaria de versionado, no una persona, asi que la validacion de
+          # la rama origen no aplica. La base y los demas checks siguen
+          # aplicandose.
+          #
+          # Se exime por el NOMBRE de la rama, no por el autor: el PR lo abre
+          # la cuenta que tiene el PAT del bot, no la cuenta `release-please`.
+          case "$HEAD" in
+            release-please--*)
+              echo "PR de release-please: se omite la validacion de la rama origen."
+              exit 0
+              ;;
+          esac
+
           # Hace cumplir lo que describe conventions/git-workflow.md.
           # La protección de GitHub no puede restringir la rama origen de un
           # PR, así que se valida aquí.
