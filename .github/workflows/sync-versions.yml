@@ -64,6 +64,10 @@ jobs:
             exit 1
           fi
 
+          # El payload puede traer `owner/repo`: el manifiesto usa solo el
+          # nombre del repositorio.
+          REPOSITORY="${REPOSITORY##*/}"
+
           bare="${VERSION#v}"
           export TODAY="$(date -u +%Y-%m-%d)"
 
