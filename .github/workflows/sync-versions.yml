@@ -81,19 +81,19 @@ jobs:
           path = pathlib.Path('versions.yml')
           text = path.read_text()
 
-          # Localiza el bloque del repositorio dentro de `repositories:`.
+          # Localiza la fila del repositorio dentro de `repositories:` y
+          # reemplaza SOLO sus renglones (version, tag, commit). La clave del
+          # repositorio se conserva: el grupo 1 es la linea con la clave y el
+          # grupo 2 son sus renglones indentados.
           pattern = re.compile(
-              r'(^  ' + re.escape(repo) + r':\n)'
-              r'(?:    version: .*\n)?'
-              r'(?:    tag: .*\n)?'
-              r'(?:    commit: .*\n)?',
+              r'(^  ' + re.escape(repo) + r':\n)((?:    [^\n]*\n)*)',
               re.MULTILINE,
           )
           if not pattern.search(text):
               print(f'::error::No se encontro la fila de {repo} en versions.yml')
               sys.exit(1)
 
-          block = f'  {repo}:\n    version: {version}\n    tag: v{version}\n'
+          block = f'    version: {version}\n    tag: v{version}\n'
           if sha:
               block += f'    commit: {sha}\n'
 
@@ -121,6 +121,12 @@ jobs:
           bare="${VERSION#v}"
           branch="chore/issue-7-sync-${REPOSITORY#dolynation-}"
           title="chore(versions): actualizar ${REPOSITORY} a v${bare}"
+
+          # Si el manifiesto ya decia lo mismo, no hay nada que abrir.
+          if git diff --quiet -- versions.yml; then
+            echo "El manifiesto ya estaba al dia con v${bare}: no se abre PR."
+            exit 0
+          fi
 
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
