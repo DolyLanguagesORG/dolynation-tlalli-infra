@@ -12,7 +12,7 @@
         {
           "type": "yaml",
           "path": "versions.yml",
-          "jsonpath": "$.repositories.dolynation-tlalli-infra"
+          "jsonpath": "$.repositories.dolynation-tlalli-infra.version"
         }
       ]
     }

@@ -1,0 +1,146 @@
+name: sync-versions
+
+# Mantiene `versions.yml` al día cuando cualquier repositorio de la
+# organización publica una release.
+#
+# Cada repo, al publicar su tag, envía un `repository_dispatch` a este
+# repositorio (ver `.github/workflows/release-please.yml` en cada uno). Este
+# workflow actualiza la fila del repo que publicó y abre —o actualiza— el pull
+# request con el cambio.
+#
+# El manifiesto es la fuente de verdad de qué versión de cada componente compone
+# la aplicación publicada. Por eso el cambio va en un PR y no en un push
+# directo: `develop` está protegido.
+
+on:
+  repository_dispatch:
+    types: [release-published]
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: 'Repo que publicó la release (ej. dolynation-atl-back)'
+        required: true
+        type: string
+      version:
+        description: 'Versión publicada (ej. v0.2.0)'
+        required: true
+        type: string
+      sha:
+        description: 'Commit exacto del tag'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-versions
+  # No se cancela: si ya hay un PR de sincronizacion en curso, terminarlo
+  # evita abrir dos PRs para el mismo repo.
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Actualizar la fila del repositorio
+        id: update
+        env:
+          ORG: DolyLanguagesORG
+          REPOSITORY: ${{ github.event.client_payload.repository || inputs.repository }}
+          VERSION: ${{ github.event.client_payload.version || inputs.version }}
+          SHA: ${{ github.event.client_payload.sha || inputs.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$REPOSITORY" ] || [ -z "$VERSION" ]; then
+            echo "::error::Falta el repositorio o la version del payload."
+            exit 1
+          fi
+
+          bare="${VERSION#v}"
+          export TODAY="$(date -u +%Y-%m-%d)"
+
+          if [ -z "$SHA" ]; then
+            SHA="$(gh api "repos/$ORG/$REPOSITORY/commits/$bare" --jq '.sha' 2>/dev/null || echo '')"
+          fi
+
+          python3 - <<'PY'
+          import os, re, pathlib, sys
+
+          repo = os.environ['REPOSITORY']
+          version = os.environ['VERSION'].lstrip('v')
+          sha = os.environ.get('SHA', '').strip()
+
+          path = pathlib.Path('versions.yml')
+          text = path.read_text()
+
+          # Localiza el bloque del repositorio dentro de `repositories:`.
+          pattern = re.compile(
+              r'(^  ' + re.escape(repo) + r':\n)'
+              r'(?:    version: .*\n)?'
+              r'(?:    tag: .*\n)?'
+              r'(?:    commit: .*\n)?',
+              re.MULTILINE,
+          )
+          if not pattern.search(text):
+              print(f'::error::No se encontro la fila de {repo} en versions.yml')
+              sys.exit(1)
+
+          block = f'  {repo}:\n    version: {version}\n    tag: v{version}\n'
+          if sha:
+              block += f'    commit: {sha}\n'
+
+          text = pattern.sub(lambda m: m.group(1) + block, text, count=1)
+
+          # `updated` es la fecha del ultimo cambio del manifiesto. Las fechas
+          # van entrecomilladas para que el actualizador YAML de release-please
+          # no las convierta en marcas de tiempo ISO.
+          today = os.environ.get('TODAY', '')
+          if today:
+              text = re.sub(r"^updated: .*$", f"updated: '{today}'", text, count=1, flags=re.MULTILINE)
+
+          path.write_text(text)
+          print(text)
+          PY
+
+      - name: Abrir el pull request del manifiesto
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          REPOSITORY: ${{ github.event.client_payload.repository || inputs.repository }}
+          VERSION: ${{ github.event.client_payload.version || inputs.version }}
+        run: |
+          set -euo pipefail
+
+          bare="${VERSION#v}"
+          branch="chore/issue-7-sync-${REPOSITORY#dolynation-}"
+          title="chore(versions): actualizar ${REPOSITORY} a v${bare}"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add versions.yml
+          git commit -m "chore(versions): actualizar ${REPOSITORY} a v${bare}"
+          git push --force origin "$branch"
+
+          body="Actualiza la fila de \`${REPOSITORY}\` en \`versions.yml\` con la
+          versión publicada \`v${bare}\`.
+
+          Ref: DolyLanguagesORG/dolynation-tlalli-infra#7"
+
+          existing="$(gh pr list --repo "${{ github.repository }}" --head "$branch" --state open --json number --jq '.[0].number' 2>/dev/null || echo '')"
+
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --repo "${{ github.repository }}" --title "$title" --body "$body" >/dev/null
+            echo "PR #$existing actualizado"
+          else
+            gh pr create --repo "${{ github.repository }}" --base develop --head "$branch" \
+              --title "$title" --body "$body" --label area:infra --label sprint-3 >/dev/null
+            echo "PR creado para $branch"
+          fi

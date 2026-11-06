@@ -1,11 +1,23 @@
 project: dolynation
-updated: '2026-10-20'
+app_version: 0.2.0
+updated: '2026-11-06'
 repositories:
-  dolynation-atl-back: 0.1.0
-  dolynation-tonatiuh-front: 0.1.1
-  dolynation-tlalli-infra: 0.2.0
-  dolynation-ehecatl-docs: 0.1.0
+  dolynation-atl-back:
+    version: 0.2.0
+    tag: v0.2.0
+    commit: 42de0ae68c285c78ab78248b5b9c9e633d7ab1f0
+  dolynation-tonatiuh-front:
+    version: 0.2.0
+    tag: v0.2.0
+    commit: 298bbb70054870f91ef5dd9b9be48fa3c71ec514
+  dolynation-tlalli-infra:
+    version: 0.2.0
+    tag: v0.2.0
+    commit: 058c9eaac3a4074ece352d29158ded9dd4a70503
+  dolynation-ehecatl-docs:
+    version: 0.1.1
+    tag: v0.1.1
+    commit: ac8153639f5571ff7fa4dd60e29f2cd3955f1c2b
 release:
-  current: 0.1.0
   target: 1.0.0
   deadline: '2026-12-10'
