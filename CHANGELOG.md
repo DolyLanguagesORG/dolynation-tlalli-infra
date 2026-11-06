@@ -5,8 +5,11 @@ Todas las novedades relevantes de este repositorio se registran aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el
 versionado es [SemVer](https://semver.org/lang/es/).
 
-La **versión se declara en el `CHANGELOG.md`**: el workflow `release.yml` exige
-que exista la sección de la versión que se va a publicar antes de crear el tag.
+La **versión vive en `version.txt`**: el tag de la release y el `CHANGELOG.md`
+deben coincidir con ella. El versionado es automático: `release-please` mantiene
+un PR de release contra `develop` que sube la versión y escribe esta sección; al
+mergearlo se crean el tag anotado y la GitHub Release. Ver
+[`conventions/versioning.md`](https://github.com/DolyLanguagesORG/dolynation-ehecatl-docs/blob/develop/conventions/versioning.md).
 
 ## [0.2.0](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.1.0...v0.2.0) (2026-11-06)
 
