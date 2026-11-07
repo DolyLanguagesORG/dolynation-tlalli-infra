@@ -103,6 +103,26 @@ jobs:
 
           text = pattern.sub(lambda m: m.group(1) + block, text, count=1)
 
+          # `app_version` es la version unica de la aplicacion: sigue a la
+          # version mas alta publicada entre los componentes. Asi el manifiesto
+          # nunca queda desfasado respecto a lo que hay desplegado.
+          def como_version(valor):
+              try:
+                  return tuple(int(x) for x in str(valor).split('.'))
+              except ValueError:
+                  return (0, 0, 0)
+
+          versiones = re.findall(r'^    version: ([0-9][^\n]*)$', text, re.MULTILINE)
+          if versiones:
+              mayor = max(versiones, key=como_version)
+              text = re.sub(
+                  r'^app_version: .*$',
+                  f'app_version: {mayor}',
+                  text,
+                  count=1,
+                  flags=re.MULTILINE,
+              )
+
           # `updated` es la fecha del ultimo cambio del manifiesto. Las fechas
           # van entrecomilladas para que el actualizador YAML de release-please
           # no las convierta en marcas de tiempo ISO.
