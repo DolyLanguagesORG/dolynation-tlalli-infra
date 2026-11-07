@@ -1,6 +1,6 @@
 project: dolynation
-app_version: 0.2.0
-updated: '2026-11-06'
+app_version: 0.2.1
+updated: '2026-11-07'
 repositories:
   dolynation-atl-back:
     version: 0.2.1
