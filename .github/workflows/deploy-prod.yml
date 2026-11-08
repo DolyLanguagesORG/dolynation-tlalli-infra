@@ -1,0 +1,132 @@
+name: deploy-prod
+
+# Despliega el ambiente de PRODUCCION.
+#
+# El environment `produccion` tiene required reviewers: GitHub PAUSA el
+# workflow antes de tocar el servidor y espera a que alguien lo apruebe. Es
+# el gate nativo de "esta publicacion sale ahora".
+#
+# El deploy nunca compila en el servidor: baja la imagen por SHA desde
+# GHCR. El SHA anterior queda registrado para poder hacer rollback.
+#
+# Ver operations/PLAN-DE-DESPLIEGUE.md.
+
+on:
+  push:
+    branches: ['rc-*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag a desplegar (vacio = el del manifiesto)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  # Reporta el estado del deployment a GitHub.
+  deployments: write
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Desplegar el ambiente de produccion
+    runs-on: ubuntu-latest
+    environment: produccion
+    steps:
+      - name: Instalar llave SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KEY_PASSPHRASE: ${{ secrets.DEPLOY_SSH_KEY_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          if [ -n "${DEPLOY_SSH_KEY_PASSPHRASE:-}" ]; then
+            printf '%s\n' "$DEPLOY_SSH_KEY_PASSPHRASE" > ~/.ssh/deploy_passphrase
+            chmod 600 ~/.ssh/deploy_passphrase
+            printf '%s\n' '#!/usr/bin/env bash' 'cat ~/.ssh/deploy_passphrase' > ~/.ssh/askpass.sh
+            chmod 700 ~/.ssh/askpass.sh
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+            ssh-agent -s | grep '^SSH_AUTH_SOCK\|^SSH_AGENT_PID' > ~/.ssh/agent_env
+            . ~/.ssh/agent_env
+            ssh-add ~/.ssh/deploy_key
+          fi
+
+          ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" > /tmp/host_keys 2>&1 || true
+          if [ ! -s /tmp/host_keys ]; then
+            echo "::error::No se pudo obtener la clave del host."
+            exit 1
+          fi
+          cat /tmp/host_keys >> ~/.ssh/known_hosts
+
+      - name: Escribir el .env del entorno
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_DATABASE: ${{ secrets.DB_DATABASE }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+          MINIMAX_MODEL: ${{ secrets.MINIMAX_MODEL }}
+        run: |
+          set -euo pipefail
+
+          # El .env lo escribe el workflow, no lo genera el servidor: asi
+          # los secretos nunca pasan por un archivo en disco del servidor.
+          CONTENT="$(printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\nDB_USER=%s\nDB_PASSWORD=%s\nDB_DATABASE=%s\nJWT_SECRET=%s\nMINIMAX_API_KEY=%s\nMINIMAX_MODEL=%s\n' \
+            "$POSTGRES_USER" "$POSTGRES_PASSWORD" "$POSTGRES_DB" \
+            "$DB_USER" "$DB_PASSWORD" "$DB_DATABASE" "$JWT_SECRET" \
+            "$MINIMAX_API_KEY" "$MINIMAX_MODEL" | base64 -w0)"
+
+          echo "$CONTENT" | ssh -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT }}" \
+            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "base64 -d > '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/.env'"
+
+      - name: Desplegar
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+
+          ssh -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT }}" \
+            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "COMPOSE_PROJECT_NAME=doly-rehearsal \
+             DB_HOST_PORT=57040 BACKEND_HOST_PORT=57041 FRONTEND_HOST_PORT=57042 \
+             IMAGE_TAG='$TAG' \
+             bash '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/scripts/deploy-env.sh'"
+
+      - name: Verificar la version desplegada
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          VERSION="$(curl -fsSL https://raw.githubusercontent.com/DolyLanguagesORG/dolynation-tlalli-infra/develop/versions.yml \
+            | grep -E '^app_version:' | head -1 | cut -d: -f2 | tr -d ' \"')"
+
+          echo "Version del manifiesto: $VERSION"
+          echo "La verificacion del endpoint /api/v1/version la hace el smoke test."
