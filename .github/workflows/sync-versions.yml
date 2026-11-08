@@ -56,6 +56,11 @@ jobs:
       - name: Actualizar la fila del repositorio
         id: update
         env:
+          # El PAT es necesario: el GITHUB_TOKEN del workflow solo alcanza
+          # este repo, y el SHA se pide en el repo que publico el tag (que
+          # puede ser otro). Sin esto, la API devuelve 404 y el SHA sale
+          # vacio.
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           ORG: DolyLanguagesORG
           REPOSITORY: ${{ github.event.client_payload.repository || inputs.repository }}
           VERSION: ${{ github.event.client_payload.version || inputs.version }}
