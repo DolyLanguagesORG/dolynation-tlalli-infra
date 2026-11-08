@@ -35,7 +35,11 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: sync-versions
+  # El grupo lleva el repositorio: los cuatro repos mandan su dispatch a la
+  # vez (los tags se publican juntos) y, con un unico grupo, GitHub cancelaba
+  # los runs que estaban esperando. Con un grupo por repo, los cuatro corren
+  # en paralelo.
+  group: sync-versions-${{ github.event.client_payload.repository || inputs.repository }}
   # No se cancela: si ya hay un PR de sincronizacion en curso, terminarlo
   # evita abrir dos PRs para el mismo repo.
   cancel-in-progress: false
@@ -72,7 +76,10 @@ jobs:
           export TODAY="$(date -u +%Y-%m-%d)"
 
           if [ -z "$SHA" ]; then
-            SHA="$(gh api "repos/$ORG/$REPOSITORY/commits/$bare" --jq '.sha' 2>/dev/null || echo '')"
+            # El tag lleva la 'v' ('v0.3.0'): hay que pedirlo CON ella.
+            # Pedirlo sin la 'v' devuelve 422 y el SHA salia vacio, con lo
+            # que la fila del manifiesto se quedaba sin commit.
+            SHA="$(gh api "repos/$ORG/$REPOSITORY/commits/v$bare" --jq '.sha' 2>/dev/null || echo '')"
           fi
 
           python3 - <<'PY'
