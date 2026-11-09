@@ -11,6 +11,19 @@ un PR de release contra `develop` que sube la versión y escribe esta sección; 
 mergearlo se crean el tag anotado y la GitHub Release. Ver
 [`conventions/versioning.md`](https://github.com/DolyLanguagesORG/dolynation-ehecatl-docs/blob/develop/conventions/versioning.md).
 
+## [0.4.0](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.3.4...v0.4.0) (2026-11-09)
+
+
+### Features
+
+* **schema:** tabla admins y skill de CI/CD al dia ([#101](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/101)) ([bd82170](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/bd821705893dd2d8e5db937e97435ce807457fb9)), closes [#22](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/22)
+* **schema:** tabla user_settings ([#103](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/103)) ([a04df8a](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/a04df8a0485e49362a9ade8073aca3e25dc307b5)), closes [#22](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/22)
+
+
+### Bug Fixes
+
+* **deploy:** staging verifica el ambiente de simulacion en el momento ([#99](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/99)) ([f6833d8](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/f6833d80c9b2f813062e26c2909c6e46f1b9fc83)), closes [#13](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/13)
+
 ## [0.3.4](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.3.3...v0.3.4) (2026-11-09)
 
 
