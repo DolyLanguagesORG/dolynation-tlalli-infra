@@ -11,6 +11,19 @@ CREATE TABLE users (
   deleted_at TIMESTAMP
 );
 
+-- Tabla: admins
+-- Administradores de la aplicacion. Va aparte de `users` a proposito: los
+-- SELECTs sobre `users` no cambian hasta que exista la migracion que decida
+-- si el rol vive en `users` o aqui.
+-- Ver `updates/05-admin-table.sql` y `atl-back#39`.
+CREATE TABLE admins (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  granted_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Índices para admins
+CREATE INDEX idx_admins_user_id ON admins(user_id);
+
 -- Tabla: auth_access_tokens
 CREATE TABLE auth_access_tokens (
   id SERIAL PRIMARY KEY,
