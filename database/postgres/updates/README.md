@@ -23,6 +23,8 @@ NN-<short-kebab-name>.sql
 Aplicados:
 
 - `05-admin-table.sql` — tabla `admins` (la pide `atl-back#39`).
+- `06-user-settings.sql` — tabla `user_settings` (el backend ya la mapea en
+  Drizzle, pero faltaba el CREATE TABLE).
 
 Reservados para los siguientes sprints (aun no existen):
 

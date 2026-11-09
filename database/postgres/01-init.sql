@@ -11,6 +11,22 @@ CREATE TABLE users (
   deleted_at TIMESTAMP
 );
 
+-- Tabla: user_settings
+-- Preferencias de estudio por usuario (idioma de superficie y categorias
+-- elegidas). El backend las mapea en Drizzle (`user_settings`); sin esta
+-- tabla el modulo de settings no puede leer ni escribir.
+-- Ver `updates/06-user-settings.sql`.
+CREATE TABLE user_settings (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  preferred_language VARCHAR(10) NOT NULL DEFAULT 'en',
+  preferred_categories JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP
+);
+
+-- Índices para user_settings
+CREATE INDEX idx_user_settings_user_id ON user_settings(user_id);
+
 -- Tabla: admins
 -- Administradores de la aplicacion. Va aparte de `users` a proposito: los
 -- SELECTs sobre `users` no cambian hasta que exista la migracion que decida
