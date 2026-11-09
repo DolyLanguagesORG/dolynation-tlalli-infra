@@ -91,12 +91,6 @@ jobs:
             "https://raw.githubusercontent.com/DolyLanguagesORG/dolynation-tlalli-infra/develop/versions.yml" \
             -o versions.yml
 
-          tar -czf /tmp/infra-env.tgz \
-            docker-compose.env.yml \
-            versions.yml \
-            scripts \
-            database
-
           if [ -f ~/.ssh/agent_env ]; then
             . ~/.ssh/agent_env
             export SSH_ASKPASS=~/.ssh/askpass.sh
@@ -104,20 +98,22 @@ jobs:
             export DISPLAY=:0
           fi
 
-          scp -i ~/.ssh/deploy_key \
-            -P "${{ secrets.DEPLOY_PORT }}" \
-            -o StrictHostKeyChecking=accept-new \
-            /tmp/infra-env.tgz \
-            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/infra-env.tgz"
-
-          ssh -i ~/.ssh/deploy_key \
-            -p "${{ secrets.DEPLOY_PORT }}" \
-            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
-            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "mkdir -p '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra' && \
-             tar -xzf /tmp/infra-env.tgz -C '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra' && \
-             chmod +x '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra'/scripts/*.sh && \
-             rm -f /tmp/infra-env.tgz"
+          # El tarball viaja por stdin del propio ssh. Con `scp` el archivo
+          # no llegaba al servidor (el comando salia con exito y el archivo no
+          # estaba), y el `tar` remoto fallaba con "No such file or
+          # directory".
+          tar -czf - \
+            docker-compose.env.yml \
+            versions.yml \
+            scripts \
+            database \
+            | ssh -i ~/.ssh/deploy_key \
+                -p "${{ secrets.DEPLOY_PORT }}" \
+                -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+                "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+                "mkdir -p '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra' && \
+                 tar -xzf - -C '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra' && \
+                 chmod +x '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra'/scripts/*.sh"
 
       - name: Escribir el .env del entorno
         env:
