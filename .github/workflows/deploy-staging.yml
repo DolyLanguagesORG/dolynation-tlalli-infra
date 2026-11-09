@@ -161,21 +161,25 @@ jobs:
           set -euo pipefail
 
           for i in $(seq 1 40); do
-            conclusion="$(gh api "repos/DolyLanguagesORG/dolynation-tlalli-infra/actions/workflows/smoke-test.yml/runs?head_sha=${{ github.sha }}&per_page=1" \
-              --jq '.workflow_runs[0].conclusion // "pending"')"
+            # Se miran TODOS los runs del smoke test de este commit, no solo
+            # el mas reciente: el mas reciente puede ser uno "skipped" (el que
+            # dispara el propio deploy de staging) y con eso el verde nunca
+            # se encontraba.
+            estados="$(gh api "repos/DolyLanguagesORG/dolynation-tlalli-infra/actions/workflows/smoke-test.yml/runs?head_sha=${{ github.sha }}&per_page=10" \
+              --jq '[.workflow_runs[] | .conclusion // "pending"] | join(",")')"
 
-            case "$conclusion" in
-              success)
-                echo "Smoke test de rehearsal en verde: se puede desplegar a staging."
+            case "$estados" in
+              *success*)
+                echo "Smoke test de rehearsal en verde ($estados): se puede desplegar a staging."
                 exit 0
                 ;;
-              failure|cancelled|timed_out)
-                echo "::error::El smoke test de rehearsal no paso ($conclusion): staging NO se despliega."
+              *failure*|*cancelled*|*timed_out*)
+                echo "::error::El smoke test de rehearsal no paso ($estados): staging NO se despliega."
                 exit 1
                 ;;
             esac
 
-            echo "Smoke test de rehearsal en '$conclusion' (intento $i/40). Se espera..."
+            echo "Smoke test de rehearsal todavia sin resultado ($estados) (intento $i/40). Se espera..."
             sleep 30
           done
 
