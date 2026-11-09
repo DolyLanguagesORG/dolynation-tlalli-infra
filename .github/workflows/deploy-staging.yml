@@ -112,6 +112,9 @@ jobs:
         # Staging solo se despliega si el ambiente de SIMULACION paso su
         # smoke test con este mismo commit. Asi el orden rehearsal -> staging
         # es automatico y no depende de que alguien se acuerde.
+        env:
+          # `gh` necesita un token: sin esto falla con "not logged in".
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
 
