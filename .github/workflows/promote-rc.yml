@@ -126,7 +126,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          for repo in dolynation-atl-back dolynation-tonatiuh-front; do
+          # Los cuatro repos se promueven con la misma decision: los tres
+          # que se despliegan (backend, frontend) y el de documentacion, para
+          # que `main` no quede desfasado entre repos.
+          for repo in dolynation-atl-back dolynation-tonatiuh-front dolynation-ehecatl-docs; do
             # La rc tiene que existir en el repo: si no, ese repo no tiene
             # nada que promover.
             if ! git ls-remote --exit-code --heads \
