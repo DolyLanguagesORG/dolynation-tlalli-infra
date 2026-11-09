@@ -1,0 +1,52 @@
+name: release-guard
+
+# Guard single-flight de las ramas `rc-*`.
+#
+# Solo puede existir UNA rc a la vez en todo el proyecto. Si ya hay otra, este
+# workflow falla con un mensaje claro y la rc nueva no se despliega.
+#
+# Por qué importa: la rc es la combinación de versiones que se va a
+# promover. Si hubiera dos a la vez, dos combinaciones distintas podrían
+# llegar a producción sin que nadie lo notara.
+#
+# El script vive en el repo de infra (fuente única) y se baja por HTTPS: los
+# repos son públicos, así que no hace falta SSH ni secrets. Por eso el mismo
+# workflow funciona en los cuatro repos, incluido el de documentación, que no
+# tiene credenciales de despliegue.
+#
+# Ver operations/PLAN-DE-DESPLIEGUE.md.
+
+on:
+  push:
+    branches: ['rc-*']
+  workflow_dispatch:
+    inputs:
+      rc:
+        description: 'Rama rc a verificar (ej. rc-1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-guard-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Verificar que no hay otra rc
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar las ramas rc de los cuatro repos
+        env:
+          BRANCH: ${{ github.ref_name || inputs.rc }}
+        run: |
+          set -euo pipefail
+
+          curl -fsSL \
+            "https://raw.githubusercontent.com/DolyLanguagesORG/dolynation-tlalli-infra/develop/scripts/release-guard.sh" \
+            -o /tmp/release-guard.sh
+          chmod +x /tmp/release-guard.sh
+
+          bash /tmp/release-guard.sh "$BRANCH"

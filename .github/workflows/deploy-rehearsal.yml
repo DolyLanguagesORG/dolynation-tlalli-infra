@@ -85,6 +85,16 @@ jobs:
         run: |
           set -euo pipefail
 
+          # La llave del servidor tiene passphrase: el agente SSH es lo que
+          # permite usarla sin prompt. Sin esto, `ssh` falla con
+          # "Permission denied (publickey)".
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+
           # El .env lo escribe el workflow, no lo genera el servidor: asi
           # los secretos nunca pasan por un archivo en disco del servidor.
           CONTENT="$(printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\nDB_USER=%s\nDB_PASSWORD=%s\nDB_DATABASE=%s\nJWT_SECRET=%s\nMINIMAX_API_KEY=%s\nMINIMAX_MODEL=%s\n' \
@@ -115,7 +125,8 @@ jobs:
             -p "${{ secrets.DEPLOY_PORT }}" \
             -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "COMPOSE_PROJECT_NAME=doly-rehearsal \
+            "ORG_DIR='${{ secrets.ORG_PATH }}' \
+             COMPOSE_PROJECT_NAME=doly-rehearsal \
              DB_HOST_PORT=57040 BACKEND_HOST_PORT=57041 FRONTEND_HOST_PORT=57042 \
              IMAGE_TAG='$TAG' \
              bash '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/scripts/deploy-env.sh'"

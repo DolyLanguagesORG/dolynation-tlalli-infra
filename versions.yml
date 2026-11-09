@@ -1,5 +1,5 @@
 project: dolynation
-app_version: 0.3.2
+app_version: 0.3.0
 updated: '2026-11-09'
 repositories:
   dolynation-atl-back:

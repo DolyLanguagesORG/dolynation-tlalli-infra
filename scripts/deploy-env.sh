@@ -68,10 +68,13 @@ fi
 log "Manifiesto: app=$APP_VERSION back=$BACKEND_VERSION front=$FRONTEND_VERSION"
 
 # --- 2. Determinar las etiquetas de imagen --------------------------------
-# El backend va por SHA (inmutable). El frontend, por version: su imagen se
-# publica con las dos, pero la version es la que se puede leer.
+# Las DOS imagenes se despliegan por SHA (inmutable): asi se sabe exactamente
+# que corre y el rollback es cambiar el SHA. La etiqueta por version tambien
+# se publica, pero solo para leerla; si se desplegara por ahi, una
+# reconstruccion posterior moveria la version y el rollback dejaria de ser
+# exacto.
 BACKEND_TAG="${IMAGE_TAG:-${BACKEND_COMMIT:-$BACKEND_VERSION}}"
-FRONTEND_TAG="${FRONTEND_TAG:-$FRONTEND_VERSION}"
+FRONTEND_TAG="${FRONTEND_TAG:-${FRONTEND_COMMIT:-$FRONTEND_VERSION}}"
 
 BACKEND_IMAGE="$REGISTRY/dolynation-atl-back:$BACKEND_TAG"
 FRONTEND_IMAGE="$REGISTRY/dolynation-tonatiuh-front:$FRONTEND_TAG"
