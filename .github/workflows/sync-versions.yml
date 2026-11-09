@@ -116,7 +116,9 @@ jobs:
           text = pattern.sub(lambda m: m.group(1) + block, text, count=1)
 
           # `app_version` es la version unica de la aplicacion: sigue a la
-          # version mas alta publicada entre los componentes. Asi el manifiesto
+          # version mas alta entre los componentes que la forman (backend y
+          # frontend). Infra y docs versionan su propio software: no mandan en
+          # la version de la app. Asi el manifiesto
           # nunca queda desfasado respecto a lo que hay desplegado.
           def como_version(valor):
               try:
@@ -124,7 +126,22 @@ jobs:
               except ValueError:
                   return (0, 0, 0)
 
-          versiones = re.findall(r'^    version: ([0-9][^\n]*)$', text, re.MULTILINE)
+          # Solo cuentan backend y frontend: son los que forman la app que
+          # ve el usuario. Infra y docs versionan su propio software.
+          APP_REPOS = ('dolynation-atl-back', 'dolynation-tonatiuh-front')
+
+          versiones = []
+          for nombre in APP_REPOS:
+              fila = re.search(
+                  r'^  ' + re.escape(nombre) + r':\n((?:    [^\n]*\n)*)',
+                  text, re.MULTILINE)
+              if not fila:
+                  continue
+              version = re.search(
+                  r'^    version: ([0-9][^\n]*)$', fila.group(1), re.MULTILINE)
+              if version:
+                  versiones.append(version.group(1).strip())
+
           if versiones:
               mayor = max(versiones, key=como_version)
               text = re.sub(

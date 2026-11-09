@@ -1,0 +1,160 @@
+name: promote-rc
+
+# Promueve una `rc-<version>` a `main`.
+#
+# La rc es la combinacion de versiones que se va a produccion. Este workflow
+# es el que hace que **una sola decision** promueva los cuatro repos:
+#
+#   rc-<version> ──► PR a main (infra) ──► al mergearlo: cascada con los
+#                    PRs rc -> main de back y front ──► deploy a produccion
+#
+# La cascada usa un PAT porque el `GITHUB_TOKEN` no dispara workflows en
+# otros repos: los PRs en cascada no tendrian checks y no se podrian mergear.
+#
+# Ver operations/FLUJO-DE-RELEASE.md.
+
+on:
+  push:
+    branches: ['rc-*']
+  pull_request:
+    # La cascada se dispara cuando el PR de la rc se mergea a `main`.
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      rc:
+        description: 'Rama rc a promover (ej. rc-1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote-rc
+  # No se cancela: promover dos rc a la vez seria justo lo que el guard
+  # single-flight evita.
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Verificar el single-flight
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar las ramas rc de los cuatro repos
+        env:
+          BRANCH: ${{ github.ref_name || inputs.rc }}
+        run: |
+          set -euo pipefail
+
+          curl -fsSL \
+            "https://raw.githubusercontent.com/DolyLanguagesORG/dolynation-tlalli-infra/develop/scripts/release-guard.sh" \
+            -o /tmp/release-guard.sh
+          chmod +x /tmp/release-guard.sh
+
+          bash /tmp/release-guard.sh "$BRANCH"
+
+  open-pr:
+    name: Abrir el PR de la rc hacia main
+    needs: guard
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comprobar que la rc existe
+        env:
+          RC: ${{ github.ref_name || inputs.rc }}
+        run: |
+          set -euo pipefail
+
+          if ! git ls-remote --exit-code --heads \
+            "https://github.com/DolyLanguagesORG/dolynation-tlalli-infra.git" "$RC" >/dev/null 2>&1; then
+            echo "::error::La rama '$RC' no existe en este repo."
+            exit 1
+          fi
+
+          echo "rc verificada: $RC"
+
+      - name: Abrir el PR hacia main
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          RC: ${{ github.ref_name || inputs.rc }}
+        run: |
+          set -euo pipefail
+
+          # Si ya existe un PR abierto desde esta rc, no se duplica.
+          existing="$(gh pr list --repo "${{ github.repository }}" \
+            --head "$RC" --base main --state open \
+            --json number --jq '.[0].number // empty')"
+
+          if [ -n "$existing" ]; then
+            echo "Ya existe el PR #$existing desde $RC."
+            exit 0
+          fi
+
+          gh pr create --repo "${{ github.repository }}" \
+            --base main --head "$RC" \
+            --title "chore(release): promover $RC a produccion" \
+            --body "Promocion de la rc \`$RC\` a \`main\`.
+
+          Esta rc es la combinacion de versiones que se va a produccion: cada
+          repositorio va en la version que declara \`versions.yml\`.
+
+          Los checks de este PR tienen que pasar y hacen falta 2 aprobaciones
+          (una de ellas, de un code owner). El gate de \`main\` exige ademas
+          que el despliegue a \`staging\` haya sido exitoso con este mismo
+          commit.
+
+          Cuando se mergee, la cascada abre los PRs \`$RC\` -> \`main\` en el
+          backend y el frontend, y el deploy a produccion espera su
+          aprobacion (2 revisores, sin self-review).
+
+          Refs #4"
+          echo "PR abierto"
+
+  cascade:
+    name: Cascada hacia backend y frontend
+    # Solo cuando el PR de la rc se ha mergeado a main: es lo que dispara la
+    # promocion de los demas repos.
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Abrir los PRs de la cascada
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          RC: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+
+          for repo in dolynation-atl-back dolynation-tonatiuh-front; do
+            # La rc tiene que existir en el repo: si no, ese repo no tiene
+            # nada que promover.
+            if ! git ls-remote --exit-code --heads \
+              "https://github.com/DolyLanguagesORG/$repo.git" "$RC" >/dev/null 2>&1; then
+              echo "  $repo: no tiene la rama $RC. Se omite."
+              continue
+            fi
+
+            existing="$(gh pr list --repo "DolyLanguagesORG/$repo" \
+              --head "$RC" --base main --state open \
+              --json number --jq '.[0].number // empty')"
+
+            if [ -n "$existing" ]; then
+              echo "  $repo: ya existe el PR #$existing."
+              continue
+            fi
+
+            gh pr create --repo "DolyLanguagesORG/$repo" \
+              --base main --head "$RC" \
+              --title "chore(release): promover $RC a produccion" \
+              --body "Promocion a \`main\` disparada por la rc \`$RC\`.
+
+          El deploy a \`staging\` de esta combinacion de versiones ya paso y su
+          smoke test esta en verde.
+
+          El deploy a produccion espera su aprobacion (2 revisores, sin
+          self-review).
+
+          Refs #4"
+            echo "  $repo: PR abierto."
+          done

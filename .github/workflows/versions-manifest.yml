@@ -1,0 +1,146 @@
+name: versions-manifest
+
+# Valida el manifiesto de versiones.
+#
+# `versions.yml` es la fuente de verdad de que version esta publicada en cada
+# repositorio. Este workflow comprueba que:
+#
+#   1. cada repo declare version, tag y commit con el formato correcto;
+#   2. el tag declarado exista de verdad en ese repositorio;
+#   3. `app_version` sea la version mas alta entre backend y frontend (los
+#      componentes que forman la app).
+#
+# Si el manifiesto se adelanta a la release (declara un tag que todavia no
+# existe), el despliegue no tendria imagen que bajar: por eso se avisa.
+#
+# Ver operations/FLUJO-DE-RELEASE.md.
+
+on:
+  pull_request:
+    paths:
+      - 'versions.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'versions.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validar el manifiesto
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validar formato y coherencia
+        run: |
+          set -euo pipefail
+
+          if [ ! -f versions.yml ]; then
+            echo "::error::No se encuentra versions.yml"
+            exit 1
+          fi
+
+          echo "Contenido del manifiesto:"
+          cat versions.yml
+          echo ""
+
+          python3 - <<'PY'
+          import re
+          import sys
+
+          texto = open('versions.yml', encoding='utf-8').read()
+
+          filas = re.findall(
+              r'^  ([a-z0-9-]+):\n((?:    [^\n]*\n)*)', texto, re.MULTILINE)
+          if not filas:
+              print('::error::No se encontraron repositorios en el manifiesto.')
+              sys.exit(1)
+
+          errores = []
+          versiones = {}
+
+          for repo, bloque in filas:
+              def campo(nombre):
+                  m = re.search(r'^    ' + nombre + r': *(\S+)\s*$', bloque, re.MULTILINE)
+                  return m.group(1).strip() if m else ''
+
+              version = campo('version')
+              tag = campo('tag')
+              commit = campo('commit')
+
+              if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
+                  errores.append(f"{repo}: version invalida ('{version}'), se espera X.Y.Z")
+              if tag != f'v{version}':
+                  errores.append(f"{repo}: tag ('{tag}') no corresponde a la version ('v{version}')")
+              if not re.fullmatch(r'[0-9a-f]{40}', commit):
+                  errores.append(f"{repo}: commit invalido ('{commit}'), se esperan 40 hex")
+
+              versiones[repo] = version
+
+          # `app_version` debe ser la version mas alta de los componentes que
+          # forman la app (backend y frontend). Infra y docs no mandan.
+          app_repos = ('dolynation-atl-back', 'dolynation-tonatiuh-front')
+          presentes = [versiones[r] for r in app_repos if r in versiones]
+          if not presentes:
+              errores.append('El manifiesto no declara backend ni frontend.')
+          else:
+              esperada = max(presentes, key=lambda v: tuple(int(x) for x in v.split('.')))
+              m = re.search(r'^app_version: *(\S+)\s*$', texto, re.MULTILINE)
+              actual = m.group(1).strip() if m else ''
+              if actual != esperada:
+                  errores.append(
+                      f"app_version es '{actual}' y deberia ser '{esperada}' "
+                      f"(la mas alta entre backend y frontend)")
+
+          if errores:
+              for e in errores:
+                  print('::error::' + e)
+              sys.exit(1)
+
+          print('Manifiesto con formato valido.')
+          for repo, bloque in filas:
+              version = re.search(r'^    version: *(\S+)\s*$', bloque, re.MULTILINE)
+              print(f'  {repo}: {version.group(1) if version else "?"}')
+          PY
+
+      - name: Comprobar que los tags existen
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # Si un repo todavia no tiene el tag que el manifiesto declara, el
+          # manifiesto se esta adelantando a la release.
+          repos="$(awk '
+            /^repositories:/ { in_section = 1; next }
+            /^[^[:space:]]/ { in_section = 0 }
+            in_section && /^  [a-z0-9-]+:/ { print $1 }
+          ' versions.yml | tr -d ':')"
+
+          for repo in $repos; do
+            tag="$(awk -v repo="$repo" '
+              $1 == repo ":" { in_repo = 1; next }
+              in_repo && /^[a-z]/ { in_repo = 0 }
+              in_repo && $1 == "tag:" { print $2; exit }
+            ' versions.yml)"
+
+            if [ -z "$tag" ]; then
+              echo "::warning::No se pudo leer el tag de '$repo'."
+              continue
+            fi
+
+            if gh api "repos/DolyLanguagesORG/$repo/git/ref/tags/$tag" >/dev/null 2>&1; then
+              echo "$repo: $tag existe."
+            else
+              echo "::warning::El repositorio '$repo' todavia no tiene el tag '$tag'."
+              echo "::warning::El manifiesto puede estar adelantado a la release."
+            fi
+          done

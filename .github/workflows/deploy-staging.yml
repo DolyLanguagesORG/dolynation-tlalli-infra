@@ -22,6 +22,8 @@ on:
 
 permissions:
   contents: read
+  # Para consultar los runs del smoke test y esperar su resultado.
+  actions: read
   # Reporta el estado del deployment a GitHub.
   deployments: write
 
@@ -83,6 +85,16 @@ jobs:
         run: |
           set -euo pipefail
 
+          # La llave del servidor tiene passphrase: el agente SSH es lo que
+          # permite usarla sin prompt. Sin esto, `ssh` falla con
+          # "Permission denied (publickey)".
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+
           # El .env lo escribe el workflow, no lo genera el servidor: asi
           # los secretos nunca pasan por un archivo en disco del servidor.
           CONTENT="$(printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\nDB_USER=%s\nDB_PASSWORD=%s\nDB_DATABASE=%s\nJWT_SECRET=%s\nMINIMAX_API_KEY=%s\nMINIMAX_MODEL=%s\n' \
@@ -95,6 +107,38 @@ jobs:
             -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             "base64 -d > '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/.env'"
+
+      - name: Esperar el smoke test de rehearsal
+        # Staging solo se despliega si el ambiente de SIMULACION paso su
+        # smoke test con este mismo commit. Asi el orden rehearsal -> staging
+        # es automatico y no depende de que alguien se acuerde.
+        env:
+          # `gh` necesita un token: sin esto falla con "not logged in".
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          for i in $(seq 1 40); do
+            conclusion="$(gh api "repos/DolyLanguagesORG/dolynation-tlalli-infra/actions/workflows/smoke-test.yml/runs?head_sha=${{ github.sha }}&per_page=1" \
+              --jq '.workflow_runs[0].conclusion // "pending"')"
+
+            case "$conclusion" in
+              success)
+                echo "Smoke test de rehearsal en verde: se puede desplegar a staging."
+                exit 0
+                ;;
+              failure|cancelled|timed_out)
+                echo "::error::El smoke test de rehearsal no paso ($conclusion): staging NO se despliega."
+                exit 1
+                ;;
+            esac
+
+            echo "Smoke test de rehearsal en '$conclusion' (intento $i/40). Se espera..."
+            sleep 30
+          done
+
+          echo "::error::El smoke test de rehearsal no termino a tiempo: staging NO se despliega."
+          exit 1
 
       - name: Desplegar
         env:
@@ -113,10 +157,60 @@ jobs:
             -p "${{ secrets.DEPLOY_PORT }}" \
             -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "COMPOSE_PROJECT_NAME=doly-rehearsal \
-             DB_HOST_PORT=57040 BACKEND_HOST_PORT=57041 FRONTEND_HOST_PORT=57042 \
+            "ORG_DIR='${{ secrets.ORG_PATH }}' \
+             COMPOSE_PROJECT_NAME=doly-staging \
+             DB_HOST_PORT=57020 BACKEND_HOST_PORT=57021 FRONTEND_HOST_PORT=57022 \
              IMAGE_TAG='$TAG' \
              bash '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/scripts/deploy-env.sh'"
+
+      - name: Registrar el deployment en los repos de los componentes
+        # El gate de `main` de back y front exige un deployment exitoso en SU
+        # environment `staging`. Ese deploy lo hace este repo (infra), asi que
+        # aqui se replica el registro, con el MISMO SHA que se desplego, en los
+        # repos de los componentes: el gate queda satisfecho con lo que se
+        # probo de verdad.
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+
+          manifest='${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/versions.yml'
+
+          shas="$(ssh -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT }}" \
+            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "awk '/^  dolynation-atl-back:/{f=1;next} f&&/commit:/{print \$2; exit}' '$manifest'; \
+             awk '/^  dolynation-tonatiuh-front:/{f=1;next} f&&/commit:/{print \$2; exit}' '$manifest'")"
+
+          back_sha="$(printf '%s\n' "$shas" | sed -n '1p')"
+          front_sha="$(printf '%s\n' "$shas" | sed -n '2p')"
+
+          for par in "dolynation-atl-back:$back_sha" "dolynation-tonatiuh-front:$front_sha"; do
+            repo="${par%%:*}"
+            sha="${par##*:}"
+
+            if [ -z "$sha" ]; then
+              echo "::warning::No se pudo leer el commit de $repo en el manifiesto: se omite su deployment."
+              continue
+            fi
+
+            id="$(gh api --method POST "repos/DolyLanguagesORG/$repo/deployments" \
+              -f ref="$sha" -f environment=staging -F auto_merge=false --jq .id)"
+
+            gh api --method POST "repos/DolyLanguagesORG/$repo/deployments/$id/statuses" \
+              -f state=success \
+              -f description="Desplegado en staging por dolynation-tlalli-infra" >/dev/null
+
+            echo "deployment #$id registrado en $repo para $sha"
+          done
 
       - name: Verificar la version desplegada
         env:

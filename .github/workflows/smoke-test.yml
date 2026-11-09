@@ -43,8 +43,17 @@ jobs:
   smoke:
     name: Smoke test
     runs-on: ubuntu-latest
-    # El smoke test no pide aprobacion: es una verificacion tecnica.
-    environment: rehearsal
+    # Environment propio (`smoke-test`), NO `staging` ni `prod`: si el smoke
+    # test declarara `staging`, GitHub registraria un deployment mas en ese
+    # environment y el gate de `main` podria tomar un smoke test por un
+    # despliegue real.
+    environment: smoke-test
+    # Con `workflow_run` y `types: [completed]` este workflow tambien se
+    # dispara cuando el deploy anterior termino en `failure`: se verificaria
+    # un ambiente a medio desplegar. Solo se corre si el deploy fue exitoso.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Instalar llave SSH
         env:
@@ -81,8 +90,44 @@ jobs:
           API_URL: ${{ inputs.api }}
           WEB_URL: ${{ inputs.web }}
           EXPECTED_VERSION: ${{ inputs.version }}
+          DEPLOY_WORKFLOW: ${{ github.event.workflow_run.name }}
         run: |
           set -euo pipefail
+
+          # En `workflow_dispatch` las URLs vienen de los inputs. En
+          # `workflow_run` no existen: se deducen del ambiente que se
+          # desplego (el nombre del workflow que disparo el evento).
+          if [ -z "$API_URL" ] || [ -z "$WEB_URL" ]; then
+            case "$DEPLOY_WORKFLOW" in
+              deploy-rehearsal)
+                API_URL="http://127.0.0.1:57041"
+                WEB_URL="http://127.0.0.1:57042"
+                ;;
+              deploy-staging)
+                API_URL="http://127.0.0.1:57021"
+                WEB_URL="http://127.0.0.1:57022"
+                ;;
+              deploy-prod)
+                API_URL="http://127.0.0.1:57031"
+                WEB_URL="http://127.0.0.1:57032"
+                ;;
+              *)
+                echo "::error::No se sabe que ambiente se desplego ('$DEPLOY_WORKFLOW')."
+                exit 1
+                ;;
+            esac
+          fi
+
+          if [ -z "$EXPECTED_VERSION" ]; then
+            EXPECTED_VERSION="$(curl -fsSL \
+              https://raw.githubusercontent.com/DolyLanguagesORG/dolynation-tlalli-infra/develop/versions.yml \
+              | grep -E '^app_version:' | head -1 | cut -d: -f2 | tr -d ' \"')"
+          fi
+
+          echo "Ambiente: $DEPLOY_WORKFLOW"
+          echo "API:  $API_URL"
+          echo "Web:  $WEB_URL"
+          echo "Version esperada: $EXPECTED_VERSION"
 
           if [ -f ~/.ssh/agent_env ]; then
             . ~/.ssh/agent_env
@@ -96,6 +141,8 @@ jobs:
             -p "${{ secrets.DEPLOY_PORT }}" \
             -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "API='$API_URL' WEB='$WEB_URL' VERSION='$EXPECTED_VERSION' \
-             bash '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/scripts/smoke-test.sh' \
-               \"\$API\" \"\$WEB\" \"\$VERSION\""
+            "set -euo pipefail; \
+             curl -fsSL 'https://raw.githubusercontent.com/DolyLanguagesORG/dolynation-tlalli-infra/${{ github.sha }}/scripts/smoke-test.sh' \
+               -o /tmp/smoke-test.sh; \
+             chmod +x /tmp/smoke-test.sh; \
+             bash /tmp/smoke-test.sh '$API_URL' '$WEB_URL' '$EXPECTED_VERSION'"
