@@ -11,6 +11,17 @@ un PR de release contra `develop` que sube la versión y escribe esta sección; 
 mergearlo se crean el tag anotado y la GitHub Release. Ver
 [`conventions/versioning.md`](https://github.com/DolyLanguagesORG/dolynation-ehecatl-docs/blob/develop/conventions/versioning.md).
 
+## [0.3.4](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.3.3...v0.3.4) (2026-11-09)
+
+
+### Bug Fixes
+
+* **deploy:** el gate de rehearsal debe buscar cualquier smoke en verde ([#94](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/94)) ([b216a96](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/b216a96a1f5ea4d7a05e20373c201f5bb2673f23)), closes [#13](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/13)
+* **deploy:** enviar los archivos del ambiente por stdin del ssh ([#93](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/93)) ([be8faf5](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/be8faf5ac1eba88e45336a3a1c6f513e14df4d7d)), closes [#13](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/13)
+* **deploy:** subir al servidor los archivos del commit que se despliega ([#90](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/90)) ([8cfe8fc](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/8cfe8fc6bc72da4766409121a64748162a63a4bf)), closes [#13](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/13)
+* **deploy:** una etiqueta de imagen por servicio y manifiesto de develop ([#92](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/92)) ([16b4f0d](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/16b4f0db39c6882a256c9322629da98443dd4b56)), closes [#13](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/13)
+* **versions:** la coherencia del manifiesto es aviso, no error ([#88](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/88)) ([857d938](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/857d93887f6cc84b99c5e2b4c1487ea53bc8b92b)), closes [#27](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/27)
+
 ## [0.3.3](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.3.2...v0.3.3) (2026-11-09)
 
 
