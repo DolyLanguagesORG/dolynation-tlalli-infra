@@ -97,7 +97,8 @@ docker pull "$FRONTEND_IMAGE"
 
 # --- 5. Levantar el stack -------------------------------------------------
 export COMPOSE_PROJECT_NAME="$PROJECT"
-export IMAGE_TAG="$BACKEND_TAG"
+export BACKEND_TAG
+export FRONTEND_TAG
 
 log "Levantando el stack ($PROJECT)"
 docker compose -f "$COMPOSE_FILE" up -d --remove-orphans
