@@ -20,11 +20,20 @@ NN-<short-kebab-name>.sql
 - El orden de aplicación es numérico.
 - No renombrar un archivo después de aplicarlo a un entorno persistente.
 
-Ejemplos actuales:
+Aplicados:
+
+- `05-admin-table.sql` — tabla `admins` (la pide `atl-back#39`).
+
+Reservados para los siguientes sprints (aun no existen):
 
 - `02-sprint2-study-config.sql`
 - `03-sprint3-evaluations-vocabulary.sql`
 - `04-sprint4-admin-role.sql`
+
+> La numeracion 02, 03 y 04 queda reservada a proposito: este repositorio
+> aplica los updates en orden numerico, y los cambios que ya se necesitan
+> (como la tabla `admins`) se numeran a partir de ahi para no mezclarse con
+> los scripts ya planificados.
 
 ## Regla de idempotencia (obligatoria)
 
