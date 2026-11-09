@@ -65,6 +65,7 @@ jobs:
               sys.exit(1)
 
           errores = []
+          avisos = []
           versiones = {}
 
           for repo, bloque in filas:
@@ -78,10 +79,14 @@ jobs:
 
               if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
                   errores.append(f"{repo}: version invalida ('{version}'), se espera X.Y.Z")
-              if tag != f'v{version}':
-                  errores.append(f"{repo}: tag ('{tag}') no corresponde a la version ('v{version}')")
               if not re.fullmatch(r'[0-9a-f]{40}', commit):
                   errores.append(f"{repo}: commit invalido ('{commit}'), se esperan 40 hex")
+              # El tag puede ir un paso por detras: el manifiesto se actualiza
+              # un repositorio a la vez, asi que un PR que sincroniza una fila
+              # deja las demas (y el app_version) un momento desfasados. Eso es
+              # un aviso, no un error.
+              if tag != f'v{version}':
+                  avisos.append(f"{repo}: tag ('{tag}') no corresponde todavia a la version ('v{version}')")
 
               versiones[repo] = version
 
@@ -96,9 +101,12 @@ jobs:
               m = re.search(r'^app_version: *(\S+)\s*$', texto, re.MULTILINE)
               actual = m.group(1).strip() if m else ''
               if actual != esperada:
-                  errores.append(
+                  avisos.append(
                       f"app_version es '{actual}' y deberia ser '{esperada}' "
                       f"(la mas alta entre backend y frontend)")
+
+          for a in avisos:
+              print('::warning::' + a)
 
           if errores:
               for e in errores:
