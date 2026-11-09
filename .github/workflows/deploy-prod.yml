@@ -39,6 +39,8 @@ jobs:
     # EliasGalarza333) y sin self-review. GitHub PAUSA el workflow aqui.
     environment: prod
     steps:
+      - uses: actions/checkout@v4
+
       - name: Instalar llave SSH
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -72,6 +74,42 @@ jobs:
             exit 1
           fi
           cat /tmp/host_keys >> ~/.ssh/known_hosts
+
+      - name: Subir los archivos del ambiente
+        # El servidor usa EXACTAMENTE los archivos del commit que se
+        # despliega (compose, scripts, manifiesto y schema). Asi no puede
+        # pasar que el servidor tenga una version vieja del compose o del
+        # manifiesto mientras el repo ya va en otro lado.
+        run: |
+          set -euo pipefail
+
+          tar -czf /tmp/infra-env.tgz \
+            docker-compose.env.yml \
+            versions.yml \
+            scripts \
+            database
+
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+
+          scp -i ~/.ssh/deploy_key \
+            -P "${{ secrets.DEPLOY_PORT }}" \
+            -o StrictHostKeyChecking=accept-new \
+            /tmp/infra-env.tgz \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/infra-env.tgz"
+
+          ssh -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT }}" \
+            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "mkdir -p '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra' && \
+             tar -xzf /tmp/infra-env.tgz -C '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra' && \
+             chmod +x '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra'/scripts/*.sh && \
+             rm -f /tmp/infra-env.tgz"
 
       - name: Escribir el .env del entorno
         env:
