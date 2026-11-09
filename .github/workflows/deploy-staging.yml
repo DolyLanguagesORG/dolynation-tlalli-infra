@@ -150,41 +150,39 @@ jobs:
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             "base64 -d > '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/.env'"
 
-      - name: Esperar el smoke test de rehearsal
-        # Staging solo se despliega si el ambiente de SIMULACION paso su
-        # smoke test con este mismo commit. Asi el orden rehearsal -> staging
-        # es automatico y no depende de que alguien se acuerde.
-        env:
-          # `gh` necesita un token: sin esto falla con "not logged in".
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verificar el ambiente de simulacion
+        # Staging solo se despliega si el ambiente de SIMULACION pasa su smoke
+        # test. La verificacion se hace aqui mismo, por SSH, con el mismo
+        # script que usa el workflow de smoke test.
+        #
+        # Antes este paso esperaba a que terminara el workflow `smoke-test`
+        # emparejando los runs por commit, pero los runs disparados por
+        # `workflow_run` se registran con el SHA de `develop` y nunca se
+        # emparejaban: staging se quedaba esperando hasta fallar.
         run: |
           set -euo pipefail
 
-          for i in $(seq 1 40); do
-            # Se miran TODOS los runs del smoke test de este commit, no solo
-            # el mas reciente: el mas reciente puede ser uno "skipped" (el que
-            # dispara el propio deploy de staging) y con eso el verde nunca
-            # se encontraba.
-            estados="$(gh api "repos/DolyLanguagesORG/dolynation-tlalli-infra/actions/workflows/smoke-test.yml/runs?head_sha=${{ github.sha }}&per_page=10" \
-              --jq '[.workflow_runs[] | .conclusion // "pending"] | join(",")')"
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
 
-            case "$estados" in
-              *success*)
-                echo "Smoke test de rehearsal en verde ($estados): se puede desplegar a staging."
-                exit 0
-                ;;
-              *failure*|*cancelled*|*timed_out*)
-                echo "::error::El smoke test de rehearsal no paso ($estados): staging NO se despliega."
-                exit 1
-                ;;
-            esac
+          VERSION="$(curl -fsSL \
+            https://raw.githubusercontent.com/DolyLanguagesORG/dolynation-tlalli-infra/develop/versions.yml \
+            | grep -E '^app_version:' | head -1 | cut -d: -f2 | tr -d ' \"')"
 
-            echo "Smoke test de rehearsal todavia sin resultado ($estados) (intento $i/40). Se espera..."
-            sleep 30
-          done
+          echo "Verificando el ambiente de simulacion (esperado: $VERSION)"
 
-          echo "::error::El smoke test de rehearsal no termino a tiempo: staging NO se despliega."
-          exit 1
+          ssh -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT }}" \
+            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "bash '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/scripts/smoke-test.sh' \
+              'http://127.0.0.1:57041' 'http://127.0.0.1:57042' '$VERSION'"
+
+          echo "El ambiente de simulacion cumple el contrato: se puede desplegar a staging."
 
       - name: Desplegar
         env:
