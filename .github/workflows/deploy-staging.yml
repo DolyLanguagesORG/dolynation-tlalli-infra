@@ -175,14 +175,38 @@ jobs:
 
           echo "Verificando el ambiente de simulacion (esperado: $VERSION)"
 
-          ssh -i ~/.ssh/deploy_key \
-            -p "${{ secrets.DEPLOY_PORT }}" \
-            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
-            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "bash '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/scripts/smoke-test.sh' \
-              'http://127.0.0.1:57041' 'http://127.0.0.1:57042' '$VERSION'"
+          # Los dos deploys (rehearsal y staging) se disparan a la vez, asi
+          # que al principio el ambiente de simulacion puede seguir
+          # desplegando. Se reintenta mientras la version no sea la
+          # esperada; si el fallo es otro (login, frontend, proxy), se falla
+          # de inmediato porque no se va a arreglar esperando.
+          for i in $(seq 1 20); do
+            salida="$(ssh -i ~/.ssh/deploy_key \
+              -p "${{ secrets.DEPLOY_PORT }}" \
+              -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+              "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+              "bash '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/scripts/smoke-test.sh' \
+                'http://127.0.0.1:57041' 'http://127.0.0.1:57042' '$VERSION'" 2>&1)" && ok=1 || ok=0
 
-          echo "El ambiente de simulacion cumple el contrato: se puede desplegar a staging."
+            echo "$salida"
+
+            if [ "$ok" = "1" ]; then
+              echo "El ambiente de simulacion cumple el contrato: se puede desplegar a staging."
+              exit 0
+            fi
+
+            if echo "$salida" | grep -q "version desplegada"; then
+              echo "El ambiente de simulacion todavia no sirve la $VERSION (intento $i/20). Se espera..."
+              sleep 30
+              continue
+            fi
+
+            echo "::error::El ambiente de simulacion no cumple el contrato: staging NO se despliega."
+            exit 1
+          done
+
+          echo "::error::El ambiente de simulacion no sirvio la version $VERSION a tiempo: staging NO se despliega."
+          exit 1
 
       - name: Desplegar
         env:
