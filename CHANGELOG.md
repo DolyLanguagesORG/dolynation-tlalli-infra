@@ -11,6 +11,14 @@ un PR de release contra `develop` que sube la versión y escribe esta sección; 
 mergearlo se crean el tag anotado y la GitHub Release. Ver
 [`conventions/versioning.md`](https://github.com/DolyLanguagesORG/dolynation-ehecatl-docs/blob/develop/conventions/versioning.md).
 
+## [0.3.2](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.3.1...v0.3.2) (2026-11-09)
+
+
+### Bug Fixes
+
+* **release:** activar el auto-merge aunque el PR de release ya exista ([#66](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/66)) ([e8f3086](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/e8f3086c045c9918e47ad09225570603127daf1c)), closes [#4](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/4)
+* **versions:** usar el PAT para pedir el SHA del tag ([#77](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/77)) ([487bb03](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/487bb033adbd64cb93719f6a4fd94559ef88eb44)), closes [#27](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/27)
+
 ## [0.3.1](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.3.0...v0.3.1) (2026-11-08)
 
 
