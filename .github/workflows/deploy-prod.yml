@@ -83,6 +83,14 @@ jobs:
         run: |
           set -euo pipefail
 
+          # El manifiesto de versiones se toma de `develop`, que es donde lo
+          # mantiene `sync-versions`: la rc puede ser un commit anterior al
+          # ultimo aviso de release, y con el manifiesto viejo se desplegarian
+          # imagenes que ya no son.
+          curl -fsSL \
+            "https://raw.githubusercontent.com/DolyLanguagesORG/dolynation-tlalli-infra/develop/versions.yml" \
+            -o versions.yml
+
           tar -czf /tmp/infra-env.tgz \
             docker-compose.env.yml \
             versions.yml \
