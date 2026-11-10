@@ -62,6 +62,7 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_SSH_KEY_PASSPHRASE: ${{ secrets.DEPLOY_SSH_KEY_PASSPHRASE }}
+          DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
         run: |
           set -euo pipefail
 
@@ -82,7 +83,17 @@ jobs:
             ssh-add ~/.ssh/deploy_key
           fi
 
+          # La clave del host ya no se acepta "a ciegas": se compara con la
+          # que esta en el secret DEPLOY_HOST_KEY. Si no coincide (el host
+          # cambio o hay un intermediario), el deploy se detiene.
           ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" > /tmp/host_keys 2>&1 || true
+          if [ -n "${DEPLOY_HOST_KEY:-}" ]; then
+            if ! grep -qF "$DEPLOY_HOST_KEY" /tmp/host_keys; then
+              echo "::error::La clave del host no coincide con DEPLOY_HOST_KEY."
+              echo "::error::Si el host cambio de verdad, actualiza el secret antes de desplegar."
+              exit 1
+            fi
+          fi
           cat /tmp/host_keys >> ~/.ssh/known_hosts
 
       - name: Ejecutar el smoke test
