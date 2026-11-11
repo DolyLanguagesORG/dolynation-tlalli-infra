@@ -4,6 +4,7 @@ CREATE TABLE users (
   full_name VARCHAR(255),
   email VARCHAR(254) NOT NULL UNIQUE,
   password VARCHAR(255) NOT NULL,
+  subscription_tier VARCHAR(30) DEFAULT NULL,
   current_streak INTEGER NOT NULL DEFAULT 0,
   last_streak_date DATE,
   created_at TIMESTAMP NOT NULL,
@@ -79,6 +80,23 @@ CREATE TABLE readings (
 CREATE INDEX idx_readings_user_id ON readings(user_id);
 CREATE INDEX idx_readings_status ON readings(status);
 CREATE INDEX idx_readings_user_status ON readings(user_id, status) WHERE deleted_at IS NULL;
+CREATE INDEX idx_readings_user_created_at ON readings(user_id, created_at) WHERE deleted_at IS NULL;
+
+-- Tabla: reading_explanations (persiste preguntas/explicaciones de vocabulario y oraciones)
+CREATE TABLE reading_explanations (
+    id SERIAL PRIMARY KEY,
+    reading_id INTEGER NOT NULL REFERENCES readings(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    word VARCHAR(255) NOT NULL,
+    context TEXT,
+    explanation TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para reading_explanations
+CREATE INDEX idx_reading_explanations_reading_id ON reading_explanations(reading_id);
+CREATE INDEX idx_reading_explanations_user_created ON reading_explanations(user_id, created_at);
+CREATE INDEX idx_reading_explanations_created_at ON reading_explanations(created_at);
 
 -- Tabla: prompt_logs (para persistir logs de generación de prompts)
 CREATE TABLE prompt_logs (
