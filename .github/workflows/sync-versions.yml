@@ -203,3 +203,43 @@ jobs:
               --title "$title" --body "$body" --label area:infra --label sprint-3 >/dev/null
             echo "PR creado para $branch"
           fi
+
+      - name: Mergear el PR del manifiesto cuando la CI este en verde
+        # Mismo caso que el PR de release: lo abre el PAT y `develop` pide 1
+        # aprobacion, que nadie puede dar sobre el propio PR. El manifiesto se
+        # actualiza solo cuando los checks pasan.
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          existing="$(gh pr list --repo "${{ github.repository }}"             --head "$BRANCH" --base develop --state open             --json number --jq '.[0].number // empty')"
+
+          if [ -z "$existing" ]; then
+            echo "No hay PR del manifiesto abierto: nada que hacer."
+            exit 0
+          fi
+
+          for i in $(seq 1 20); do
+            checks="$(gh pr checks "$existing" --repo "${{ github.repository }}" --required --json name,state 2>/dev/null || echo '[]')"
+
+            total="$(printf '%s' "$checks" | jq 'length')"
+            pendientes="$(printf '%s' "$checks" | jq '[.[] | select(.state != "SUCCESS" and .state != "SKIPPED")] | length')"
+            fallidos="$(printf '%s' "$checks" | jq '[.[] | select(.state == "FAILURE" or .state == "CANCELLED" or .state == "TIMED_OUT")] | length')"
+
+            if [ "$fallidos" -gt 0 ]; then
+              echo "::warning::Un check del PR del manifiesto fallo: no se mergea."
+              exit 0
+            fi
+
+            if [ "$total" -gt 0 ] && [ "$pendientes" -eq 0 ]; then
+              echo "Checks en verde: se mergea el PR del manifiesto."
+              gh pr merge "$existing" --repo "${{ github.repository }}" --squash --admin --delete-branch=false
+              exit 0
+            fi
+
+            echo "Checks del PR del manifiesto: $pendientes pendientes (intento $i/20)."
+            sleep 30
+          done
+
+          echo "::warning::Se agoto el tiempo esperando los checks: el PR del manifiesto sigue abierto."
