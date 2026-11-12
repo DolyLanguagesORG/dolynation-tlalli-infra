@@ -11,6 +11,30 @@ un PR de release contra `develop` que sube la versión y escribe esta sección; 
 mergearlo se crean el tag anotado y la GitHub Release. Ver
 [`conventions/versioning.md`](https://github.com/DolyLanguagesORG/dolynation-ehecatl-docs/blob/develop/conventions/versioning.md).
 
+## [0.5.0](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.4.0...v0.5.0) (2026-11-12)
+
+
+### Features
+
+* **kanban:** las issues pasan a 'In Review' solas ([#119](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/119)) ([d8fcadc](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/d8fcadcf9165d23685afa591be0e879f853fd98a)), closes [#66](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/66)
+* **kanban:** las issues pasan a 'In Review' solas ([#120](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/120)) ([5069726](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/5069726366181c9ed15bf33b3c6e8691c7a74020)), closes [#66](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/66)
+* **kanban:** las issues pasan a 'In Review' solas ([#121](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/121)) ([ec78bfa](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/ec78bfa6dbdf475e4838a408ce27aa535382e4aa)), closes [#66](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/66)
+* **kanban:** las issues pasan a 'In Review' solas ([#122](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/122)) ([29abe66](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/29abe66204005075afd7da206d21589fa700170d)), closes [#66](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/66)
+* **kanban:** las issues pasan a 'In Review' solas ([#123](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/123)) ([9692615](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/9692615702b95bfd1ecfd4df2c1befa67bb77b20)), closes [#66](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/66)
+* **kanban:** las issues pasan a 'In Review' solas ([#124](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/124)) ([8e05c62](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/8e05c6299a1f88af83334a79b0ae21db47b30dab)), closes [#66](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/66)
+* **release:** la cascada tambien promueve la documentacion ([#111](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/111)) ([93306e9](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/93306e9b98bc7412f60d09cc186269d4f14d7bcd)), closes [#8](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/8)
+* **schema:** agregar soporte de suscripciones y explicaciones en postgres ([#118](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/118)) ([4b908a7](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/4b908a779bf1f419edff9d07309c347e5c520a75))
+* **smtp:** que las variables de correo lleguen al contenedor ([#116](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/116)) ([a559fdb](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/a559fdb6c3e14179b1a0b34310563c44b2275396)), closes [#102](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/102)
+
+
+### Bug Fixes
+
+* **ci:** endurecer el despliegue (permisos del .env y llave del host) ([#114](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/114)) ([ae0ce1e](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/ae0ce1ec9d37aac97d8bab0a7d46ce5a2931195a)), closes [#6](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/6)
+* **ci:** quitar las claves duplicadas de los deploys y validar los workflows con actionlint ([#125](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/125)) ([0c2f1a2](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/0c2f1a2a9a0da9e4bbe20e3f6a1bc5dd78430a8b)), closes [#102](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/102)
+* **ci:** validar la rama normalizada (los acentos no bloquean el PR) ([#113](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/113)) ([9b66fc0](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/9b66fc0d221d6a3e8879f6ea25706341a3d2e5cc)), closes [#46](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/46)
+* **compose:** quitar las claves SMTP duplicadas del compose ([#126](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/126)) ([c490234](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/c49023463d2563be3e722a025bd911dbbf35d539))
+* **deploy:** staging espera a que el ambiente de simulacion termine ([#109](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/109)) ([6ea8c0a](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/6ea8c0aa393eaee0a22e81dddb9e00c53d290bcd)), closes [#13](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/13)
+
 ## [0.4.0](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.3.4...v0.4.0) (2026-11-09)
 
 
