@@ -210,10 +210,14 @@ jobs:
         # actualiza solo cuando los checks pasan.
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          REPOSITORY: ${{ github.event.client_payload.repository || inputs.repository }}
         run: |
           set -euo pipefail
 
-          existing="$(gh pr list --repo "${{ github.repository }}"             --head "$BRANCH" --base develop --state open             --json number --jq '.[0].number // empty')"
+          # La rama del PR es la misma que usa el paso que lo abre.
+          branch="chore/issue-7-sync-${REPOSITORY#dolynation-}"
+
+          existing="$(gh pr list --repo "${{ github.repository }}" --head "$branch" --base develop --state open --json number --jq '.[0].number // empty')"
 
           if [ -z "$existing" ]; then
             echo "No hay PR del manifiesto abierto: nada que hacer."
