@@ -1,11 +1,11 @@
 project: dolynation
-app_version: 0.4.0
+app_version: 0.5.0
 updated: '2026-11-12'
 repositories:
   dolynation-atl-back:
-    version: 0.4.0
-    tag: v0.4.0
-    commit: 1f59bcb3d7f200dbce21ed636a0d088b7634ecea
+    version: 0.5.0
+    tag: v0.5.0
+    commit: c1cb8489a63a9e4bd63193bc06c992e49ee61fe6
   dolynation-tonatiuh-front:
     version: 0.3.3
     tag: v0.3.3
