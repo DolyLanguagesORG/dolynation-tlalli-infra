@@ -38,6 +38,18 @@ services:
       - JWT_REFRESH_TTL=${JWT_REFRESH_TTL}
       - AI_DEFAULT_PROVIDER=${AI_DEFAULT_PROVIDER}
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
+      # Correo transaccional (SMTP). En produccion el proveedor es Brevo.
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_FROM=${SMTP_FROM}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME}
+      - SMTP_SECURE=${SMTP_SECURE}
+      # Base publica del frontend: se usa para los enlaces de los correos.
+      - FRONTEND_BASE_URL=${FRONTEND_BASE_URL}
+      # Exige confirmar el correo antes de poder iniciar sesion.
+      - EMAIL_VERIFICATION_REQUIRED=${EMAIL_VERIFICATION_REQUIRED}
     ports:
       - "57001:3333"
     networks:
