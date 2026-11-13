@@ -13,13 +13,17 @@ CREATE TABLE users (
 );
 
 -- Tabla: user_settings
--- Preferencias de estudio por usuario (idioma de superficie y categorias
--- elegidas). El backend las mapea en Drizzle (`user_settings`); sin esta
--- tabla el modulo de settings no puede leer ni escribir.
--- Ver `updates/06-user-settings.sql`.
+-- Preferencias de estudio por usuario (idiomas ordenados por prioridad,
+-- bloqueo de cambio anual, creditos pagados de cambio y categorias elegidas).
+-- El backend las mapea en Drizzle (`user_settings`); sin esta tabla el modulo
+-- de settings no puede leer ni escribir.
+-- Ver `updates/06-user-settings.sql` y `updates/08-language-plans.sql`.
 CREATE TABLE user_settings (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  preferred_language VARCHAR(10) NOT NULL DEFAULT 'en',
+  preferred_language VARCHAR(10),
+  selected_languages JSONB NOT NULL DEFAULT '[]'::jsonb,
+  last_language_change_at TIMESTAMP,
+  language_change_credits INTEGER NOT NULL DEFAULT 0,
   preferred_categories JSONB NOT NULL DEFAULT '[]'::jsonb,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP

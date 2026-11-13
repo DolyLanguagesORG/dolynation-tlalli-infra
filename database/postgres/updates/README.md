@@ -27,6 +27,9 @@ Aplicados:
   Drizzle, pero faltaba el CREATE TABLE).
 - `07-subscriptions.sql` — columna `users.subscription_tier`, tabla
   `reading_explanations` e índice `idx_readings_user_created_at`.
+- `08-language-plans.sql` — columnas `user_settings.selected_languages`,
+  `user_settings.last_language_change_at` y
+  `user_settings.language_change_credits` (y `preferred_language` nullable).
 
 Reservados para los siguientes sprints (aun no existen):
 
