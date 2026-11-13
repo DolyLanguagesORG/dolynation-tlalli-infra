@@ -137,6 +137,19 @@ jobs:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
           MINIMAX_MODEL: ${{ secrets.MINIMAX_MODEL }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+          SMTP_FROM_NAME: ${{ secrets.SMTP_FROM_NAME }}
+          SMTP_SECURE: ${{ secrets.SMTP_SECURE }}
+          # El dominio publico del frontend de produccion todavia no esta
+          # definido (nginx aun no tiene su server_name). Se lee de la variable
+          # de environment `FRONTEND_BASE_URL` del environment `prod`: hay que
+          # crearla antes de que los correos de produccion funcionen.
+          FRONTEND_BASE_URL: ${{ vars.FRONTEND_BASE_URL }}
+          EMAIL_VERIFICATION_REQUIRED: "true"
         run: |
           set -euo pipefail
 
@@ -152,10 +165,13 @@ jobs:
 
           # El .env lo escribe el workflow, no lo genera el servidor: asi
           # los secretos nunca pasan por un archivo en disco del servidor.
-          CONTENT="$(printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\nDB_USER=%s\nDB_PASSWORD=%s\nDB_DATABASE=%s\nJWT_SECRET=%s\nMINIMAX_API_KEY=%s\nMINIMAX_MODEL=%s\n' \
+          CONTENT="$(printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\nDB_USER=%s\nDB_PASSWORD=%s\nDB_DATABASE=%s\nJWT_SECRET=%s\nMINIMAX_API_KEY=%s\nMINIMAX_MODEL=%s\nSMTP_HOST=%s\nSMTP_PORT=%s\nSMTP_USER=%s\nSMTP_PASSWORD=%s\nSMTP_FROM=%s\nSMTP_FROM_NAME=%s\nSMTP_SECURE=%s\nFRONTEND_BASE_URL=%s\nEMAIL_VERIFICATION_REQUIRED=%s\n' \
             "$POSTGRES_USER" "$POSTGRES_PASSWORD" "$POSTGRES_DB" \
             "$DB_USER" "$DB_PASSWORD" "$DB_DATABASE" "$JWT_SECRET" \
-            "$MINIMAX_API_KEY" "$MINIMAX_MODEL" | base64 -w0)"
+            "$MINIMAX_API_KEY" "$MINIMAX_MODEL" \
+            "$SMTP_HOST" "$SMTP_PORT" "$SMTP_USER" "$SMTP_PASSWORD" \
+            "$SMTP_FROM" "$SMTP_FROM_NAME" "$SMTP_SECURE" \
+            "$FRONTEND_BASE_URL" "$EMAIL_VERIFICATION_REQUIRED" | base64 -w0)"
 
           echo "$CONTENT" | ssh -i ~/.ssh/deploy_key \
             -p "${{ secrets.DEPLOY_PORT }}" \
