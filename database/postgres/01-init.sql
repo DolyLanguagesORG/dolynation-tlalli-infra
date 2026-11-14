@@ -24,9 +24,11 @@ CREATE TABLE users (
 -- El backend las mapea en Drizzle (`user_settings`); sin esta tabla el modulo
 -- de settings no puede leer ni escribir.
 -- Ver `updates/06-user-settings.sql` y `updates/08-language-plans.sql`.
+-- `preferred_language` conserva el DEFAULT 'en' de la 06: la 08 solo le quita
+-- el NOT NULL, asi que una base migrada y una base creada aqui quedan igual.
 CREATE TABLE user_settings (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  preferred_language VARCHAR(10),
+  preferred_language VARCHAR(10) DEFAULT 'en',
   selected_languages JSONB NOT NULL DEFAULT '[]'::jsonb,
   last_language_change_at TIMESTAMP,
   language_change_credits INTEGER NOT NULL DEFAULT 0,
