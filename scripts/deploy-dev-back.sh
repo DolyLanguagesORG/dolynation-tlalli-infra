@@ -15,6 +15,7 @@ set -euo pipefail
 
 ORG_DIR="${ORG_DIR:-/srv/doly/dev}"
 REPO="${REPO:-$ORG_DIR/dolynation-atl-back}"
+INFRA_REPO="${INFRA_REPO:-$ORG_DIR/dolynation-tlalli-infra}"
 CONTAINER="${CONTAINER:-doly-dev-backend}"
 HEALTH_URL="${HEALTH_URL:-http://localhost:57011/api/v1/health/ready}"
 LOCK_STAMP="${LOCK_STAMP:-/tmp/doly-dev-backend-lock}"
@@ -79,6 +80,21 @@ if [ -n "$APP_VERSION_VALUE" ]; then
   printf 'GIT_COMMIT=%s\nAPP_VERSION=%s\n' "$GIT_COMMIT_SHA" "$APP_VERSION_VALUE" >> "$REPO/.env"
 else
   log "No se pudo leer la version del package.json: se deja la que hubiera"
+fi
+
+# El schema vive en el repo de infra, no en el del backend. Antes de
+# reiniciar el backend se comprueba que la base tenga el schema actual: si el
+# backend nuevo arranca contra el schema viejo, falla con HTTP 500 en cuanto
+# toca una tabla o columna nueva.
+#
+# El script de infra puede no estar todavia en el servidor (si el PR de infra
+# todavia no se ha mergeado): en ese caso se sigue y el deploy de infra lo
+# aplicara despues.
+if [ -f "$INFRA_REPO/scripts/apply-schema.sh" ]; then
+  log "Aplicando el schema (repo de infra)"
+  FORCE=1 bash "$INFRA_REPO/scripts/apply-schema.sh"
+else
+  log "No se encontro $INFRA_REPO/scripts/apply-schema.sh: se aplica con el deploy de infra"
 fi
 
 log "Reiniciando $CONTAINER"

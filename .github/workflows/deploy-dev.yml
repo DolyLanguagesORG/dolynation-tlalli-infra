@@ -132,6 +132,14 @@ jobs:
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             "umask 077 && base64 -d > '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/.env'"
 
+      # El orden importa: primero se aplica el schema (que puede recrear la
+      # base) y despues se levanta el stack. Al revés, el backend arrancaria
+      # contra el schema viejo y fallaria con HTTP 500 en cuanto tocara una
+      # tabla nueva.
+      #
+      # `FORCE=1`: en desarrollo los datos son desechables, asi que si el
+      # schema cambio la base se recrea sin preguntar. En staging y produccion
+      # NO se usa: si la base tiene datos, el script se niega a borrarla.
       - name: Actualizar infra y levantar el stack
         run: |
           set -euo pipefail
@@ -147,5 +155,5 @@ jobs:
             -p "${{ secrets.DEPLOY_PORT }}" \
             -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "set -e; cd '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra'; git fetch --prune origin; git reset --hard origin/develop; git clean -fdq; docker compose -f docker-compose.dev.yml up -d"
+            "set -e; cd '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra'; git fetch --prune origin; git reset --hard origin/develop; git clean -fdq; FORCE=1 bash scripts/apply-schema.sh; docker compose -f docker-compose.dev.yml up -d"
 

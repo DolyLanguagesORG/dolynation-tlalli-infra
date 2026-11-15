@@ -8,7 +8,6 @@ CREATE TABLE users (
   current_streak INTEGER NOT NULL DEFAULT 0,
   last_streak_date DATE,
   -- Marca de verificación del correo. NULL = la cuenta todavía no confirmó su correo.
-  -- Ver `updates/11-email-tokens.sql`.
   email_verified_at TIMESTAMP,
   -- Locale de interfaz del usuario (`es` | `en`) para los correos transaccionales.
   -- No es el idioma de estudio (vive en `user_settings.selected_languages`).
@@ -23,9 +22,8 @@ CREATE TABLE users (
 -- bloqueo de cambio anual, creditos pagados de cambio y categorias elegidas).
 -- El backend las mapea en Drizzle (`user_settings`); sin esta tabla el modulo
 -- de settings no puede leer ni escribir.
--- Ver `updates/06-user-settings.sql` y `updates/08-language-plans.sql`.
--- `preferred_language` conserva el DEFAULT 'en' de la 06: la 08 solo le quita
--- el NOT NULL, asi que una base migrada y una base creada aqui quedan igual.
+-- `preferred_language` es opcional (DEFAULT 'en'): el backend lo usa para
+-- los correos transaccionales cuando el usuario no elige uno.
 CREATE TABLE user_settings (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   preferred_language VARCHAR(10) DEFAULT 'en',
@@ -42,9 +40,8 @@ CREATE INDEX idx_user_settings_user_id ON user_settings(user_id);
 
 -- Tabla: admins
 -- Administradores de la aplicacion. Va aparte de `users` a proposito: los
--- SELECTs sobre `users` no cambian hasta que exista la migracion que decida
--- si el rol vive en `users` o aqui.
--- Ver `updates/05-admin-table.sql` y `atl-back#39`.
+-- SELECTs sobre `users` no cambian, y el rol de administrador no se mezcla
+-- con los datos del perfil.
 CREATE TABLE admins (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   granted_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -71,7 +68,6 @@ CREATE TABLE auth_access_tokens (
 -- Tabla: auth_email_tokens
 -- Tokens de un solo uso para confirmar el correo de la cuenta y para restablecer
 -- la contraseña. Se almacena el hash SHA-256 del token, nunca el token en claro.
--- Ver `updates/11-email-tokens.sql`.
 CREATE TABLE auth_email_tokens (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

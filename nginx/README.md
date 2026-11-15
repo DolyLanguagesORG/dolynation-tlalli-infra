@@ -69,3 +69,37 @@ no se usa y el navegador negotiate TLS directamente contra el servidor.
 
 Para staging y producción se replica esta configuración cambiando los
 dominios y los puertos de los `upstream`.
+
+## Cambiar el dominio público
+
+El `server_name` de esta configuración es el **único lugar del código** donde
+aparece el dominio público. El frontend no lo conoce: su
+`BACKEND_INTERNAL_URL` es interno en los 4 ambientes
+(`http://backend:3333/api/v1`, por la red de compose).
+
+Al cambiar el dominio hay que tocar **3 cosas**, y solo una es este archivo:
+
+| # | Dónde | Qué | ¿Requiere código? |
+| --- | --- | --- | --- |
+| 1 | **este archivo** (`server_name`) | el ruteo de `devweb` / `devapi` / `stagingweb` | **Sí** |
+| 2 | `NEXT_ALLOWED_DEV_ORIGINS` (variable del environment `desarrollo` de `dolynation-tonatiuh-front`) | el websocket de HMR | **No** |
+| 3 | `FRONTEND_BASE_URL` (variable del environment correspondiente de `dolynation-atl-back`) | los enlaces de los correos transaccionales | **No** |
+
+1. **DNS / Cloudflare** → apuntar el host nuevo al servidor y emitir el
+   certificado de origen si hace falta.
+2. **Este archivo** → `server_name` del host nuevo (y `upstream` si cambian los
+   puertos). PR a `develop` y el deploy.
+3. **`NEXT_ALLOWED_DEV_ORIGINS`** → el patrón del dominio nuevo. Admite
+   comodines: `**.yacaterkos.tech` matchea cualquier subdominio (no el apex).
+   Redeploy del frontend.
+4. **`FRONTEND_BASE_URL`** → la URL pública nueva. Redeploy del backend.
+
+> La variable 2 solo aplica al **dev server**: en rehearsal, staging y
+> producción la app corre compilada (`output: 'standalone'`), sin HMR y sin
+> websocket.
+>
+> `rehearsal` **no tiene `server_name`**: no sale a internet y se accede por
+> puerto (`5704x`) desde el propio servidor.
+
+El procedimiento completo está en
+[`operations/PLAN-DE-DESPLIEGUE.md`](https://github.com/DolyLanguagesORG/dolynation-ehecatl-docs/blob/develop/operations/PLAN-DE-DESPLIEGUE.md).
