@@ -168,7 +168,7 @@ CREATE INDEX idx_prompt_logs_created_at ON prompt_logs(created_at);
 CREATE INDEX idx_prompt_logs_user_created ON prompt_logs(user_id, created_at);
 CREATE INDEX idx_prompt_logs_event_created ON prompt_logs(event, created_at);
 
--- Tabla: moderated_categories (caché permanente de moderación por clave canónica)
+-- Tabla: moderated_categories (caché permanente de moderación y blueprint de prompt por clave canónica)
 CREATE TABLE moderated_categories (
     canonical_key VARCHAR(120) PRIMARY KEY,
     sample_category VARCHAR(100) NOT NULL,
@@ -176,6 +176,8 @@ CREATE TABLE moderated_categories (
     layer VARCHAR(30),
     reason VARCHAR(120),
     provider VARCHAR(30) NOT NULL DEFAULT 'system',
+    prompt_profile JSONB,
+    profile_model VARCHAR(60),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

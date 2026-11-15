@@ -34,6 +34,7 @@ Aplicados:
 - `10-category-moderation-limits.sql` — tablas `moderated_categories` (caché permanente de veredictos de moderación para ahorro de tokens) y `category_daily_usage` (tope diario por usuario de categorías distintas evaluadas).
 - `11-email-tokens.sql` — tabla `auth_email_tokens` (tokens de un solo uso para confirmar el correo y restablecer la contraseña, guardados como hash SHA-256) y columnas `users.email_verified_at` y `users.locale`. Incluye el backfill que marca como verificadas las cuentas ya existentes.
 - `12-reading-explanations-glossary.sql` — amplía `reading_explanations` (`word TEXT`, `normalized_word`, `entry_type`, `language`, `difficulty`, `literal_meaning`, `word_breakdown`, `other_ways_to_say`, `other_contexts`, `is_saved`, `saved_at`, `updated_at`) e índices de caché por lectura y glosario persistente.
+- `13-category-prompt-library.sql` — amplía `moderated_categories` con `prompt_profile` (`JSONB`) y `profile_model` (`VARCHAR(60)`) para compartir globalmente el blueprint editorial y los subtemas de cada categoría aprobada entre usuarios sin repetir llamadas de enriquecimiento.
 
 Reservados para los siguientes sprints (aun no existen):
 
