@@ -1,6 +1,6 @@
 project: dolynation
 app_version: 0.5.0
-updated: '2026-11-13'
+updated: '2026-11-15'
 repositories:
   dolynation-atl-back:
     version: 0.5.0
@@ -12,8 +12,8 @@ repositories:
     commit: b0aac432b3df9abad35772204ec14c396ad75842
   dolynation-tlalli-infra:
     version: 0.6.2
-    tag: v0.6.1
-    commit: 22d2b811dc57f760d94f13e061aa11b329ccd260
+    tag: v0.6.2
+    commit: 59111f37e2668eb69c7ab318bc82d169bbf219a6
   dolynation-ehecatl-docs:
     version: 0.2.0
     tag: v0.2.0
