@@ -15,9 +15,9 @@ repositories:
     tag: v0.6.2
     commit: 59111f37e2668eb69c7ab318bc82d169bbf219a6
   dolynation-ehecatl-docs:
-    version: 0.2.0
-    tag: v0.2.0
-    commit: 57cba7d6bdfa3b6c38db250d3708204e6b78bfc5
+    version: 0.2.1
+    tag: v0.2.1
+    commit: 02bd5ecfbd4533d79370c49017f5719fc90aa079
 release:
   target: 1.0.0
   deadline: '2026-12-10'
