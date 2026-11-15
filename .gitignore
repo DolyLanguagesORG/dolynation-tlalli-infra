@@ -8,3 +8,7 @@
 
 # Estado local
 *.log
+
+# Binario que se descarga la CI para validar los workflows.
+# No debe acabar en el repo: se baja en cada run.
+actionlint

@@ -18,6 +18,9 @@
 #   IMAGE_TAG             etiqueta de la imagen (SHA o version). Por defecto,
 #                         la del backend segun el manifiesto.
 #   DB_HOST_PORT / BACKEND_HOST_PORT / FRONTEND_HOST_PORT  puertos en el host
+#   SCHEMA_FORCE          1 = recrea la base aunque tenga datos (rehearsal y
+#                         staging). 0 = nunca borra datos (produccion): si el
+#                         schema cambio y hay datos, el deploy se detiene.
 #
 # Ver operations/PLAN-DE-DESPLIEGUE.md.
 set -euo pipefail
@@ -28,6 +31,8 @@ REPO="$ORG_DIR/dolynation-tlalli-infra"
 COMPOSE_FILE="$REPO/docker-compose.env.yml"
 MANIFEST="$REPO/versions.yml"
 REGISTRY="ghcr.io/dolylanguagesorg"
+# 0 = nunca recrear una base con datos (produccion). 1 = recrearla (pruebas).
+SCHEMA_FORCE="${SCHEMA_FORCE:-0}"
 
 log() { echo "[deploy-env] $*"; }
 
@@ -101,15 +106,20 @@ docker pull "$FRONTEND_IMAGE"
 # que arranque el backend de la version nueva: si no, el backend revienta con
 # HTTP 500 en cuanto toca una tabla o columna nueva.
 #
-# En staging/produccion NO se usa `FORCE=1`: si la base ya tiene datos y el
-# schema cambio, el script se niega a recrearla y el deploy se detiene. Ahi
-# toca migrar a mano (ver conventions/database.md).
+# `SCHEMA_FORCE` decide que se hace cuando la base **tiene datos**:
+#
+#   - `1` (rehearsal y staging): los datos son de prueba, asi que la base se
+#     recrea sin preguntar. Es lo que hace falta para que estos ambientes
+#     puedan seguir al ritmo del release train.
+#   - `0` (produccion, por defecto): **no se borra nada**. Si el schema
+#     cambio y hay datos, el deploy se detiene y hay que migrar a mano con
+#     `database/postgres/updates/NN-*.sql` (fase 2).
 export COMPOSE_PROJECT_NAME="$PROJECT"
 export BACKEND_TAG
 export FRONTEND_TAG
 
-log "Aplicando el schema"
-COMPOSE_FILE="$COMPOSE_FILE" bash "$REPO/scripts/apply-schema.sh"
+log "Aplicando el schema (SCHEMA_FORCE=$SCHEMA_FORCE)"
+FORCE="$SCHEMA_FORCE" COMPOSE_FILE="$COMPOSE_FILE" bash "$REPO/scripts/apply-schema.sh"
 
 # --- 6. Levantar el stack -------------------------------------------------
 log "Levantando el stack ($PROJECT)"
