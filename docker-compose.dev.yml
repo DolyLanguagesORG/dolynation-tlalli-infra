@@ -23,7 +23,6 @@ services:
   db:
     image: postgres:15
     container_name: doly-dev-db
-    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -46,7 +45,6 @@ services:
   backend:
     image: node:22-bookworm
     container_name: doly-dev-backend
-    restart: unless-stopped
     working_dir: /app
     command: sh -lc '[ -d node_modules ] || npm ci --no-audit --no-fund; exec npm run start:dev'
     volumes:
@@ -63,7 +61,6 @@ services:
   frontend:
     image: node:22-bookworm
     container_name: doly-dev-frontend
-    restart: unless-stopped
     working_dir: /app
     command: sh -lc '[ -d node_modules ] || npm ci --no-audit --no-fund; exec npm run dev -- -H 0.0.0.0'
     volumes:
