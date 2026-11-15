@@ -20,20 +20,26 @@ EXPECTED_VERSION="${3:?falta la version esperada}"
 PASS=0
 FAIL=0
 
-log() { echo "[smoke] $*"; }
+# Los resultados van a **stderr**: asi `check_status` se puede usar con
+# `> /dev/null` (para descartar el cuerpo) sin tragarse el "OK" de la
+# comprobacion. Antes, el `> /dev/null` se comia el mensaje y el smoke test
+# reportaba 5 correctos sin dejar claro cuales eran.
+log() { echo "[smoke] $*" >&2; }
 
 ok() {
   PASS=$((PASS + 1))
-  echo "  OK    $1"
+  echo "  OK    $1" >&2
 }
 
 ko() {
   FAIL=$((FAIL + 1))
-  echo "  FALLA $1"
-  [ -n "${2:-}" ] && echo "        $2"
+  echo "  FALLA $1" >&2
+  [ -n "${2:-}" ] && echo "        $2" >&2
 }
 
 # --- API: codigo HTTP esperado ---
+# Imprime el cuerpo en stdout y deja el codigo HTTP en LAST_STATUS.
+LAST_STATUS=""
 check_status() {
   local path="$1" expected="$2" label="$3" method="${4:-GET}" body="${5:-}"
   local out status payload
@@ -47,6 +53,7 @@ check_status() {
 
   status="$(printf '%s' "$out" | tail -n1)"
   payload="$(printf '%s' "$out" | sed '$d')"
+  LAST_STATUS="$status"
 
   if [ "$status" = "$expected" ]; then
     ok "$label ($status)"
@@ -57,7 +64,15 @@ check_status() {
   printf '%s' "$payload"
 }
 
-echo "== API =="
+# --- API: llamada POST que devuelve "<status>|<cuerpo>" ---
+api_post() {
+  local path="$1" body="$2" out
+  out="$(curl -s -w '\n%{http_code}' -X POST -H 'Content-Type: application/json' \
+    -d "$body" --max-time 20 "$API$path" 2>&1)"
+  printf '%s|%s' "$(printf '%s' "$out" | tail -n1)" "$(printf '%s' "$out" | sed '$d')"
+}
+
+echo "== API ==" >&2
 check_status "/api/v1/health/live" "200" "GET /health/live" >/dev/null
 check_status "/api/v1/health/ready" "200" "GET /health/ready" >/dev/null
 
@@ -89,45 +104,95 @@ fi
 EMAIL="smoke-$(date +%s)@example.com"
 PASSWORD="SmokeTest1234!"
 
-REGISTER="$(check_status "/api/v1/auth/register" "201" "POST /auth/register" POST \
+REGISTER="$(api_post "/api/v1/auth/register" \
   "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\",\"fullName\":\"Smoke Test\"}")"
+REG_STATUS="${REGISTER%%|*}"
+REG_BODY="${REGISTER#*|}"
 
-LOGIN="$(check_status "/api/v1/auth/login" "200" "POST /auth/login" POST \
-  "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")"
+if [ "$REG_STATUS" = "201" ]; then
+  ok "POST /auth/register (201)"
+else
+  ko "POST /auth/register" "esperado 201, recibido $REG_STATUS"
+fi
 
-TOKEN="$(printf '%s' "$LOGIN" | grep -oE '"accessToken"[[:space:]]*:[[:space:]]*"[^"]*"' \
-  | head -1 | cut -d'"' -f4)"
+# ¿Este ambiente exige confirmar el correo antes de poder entrar? En rehearsal
+# y en produccion si (`EMAIL_VERIFICATION_REQUIRED=true`). Entonces el login
+# NO devuelve token hasta que el correo este verificado: y eso tambien es
+# parte del contrato que hay que comprobar.
+REQUIRES_VERIFICATION="$(printf '%s' "$REG_BODY" \
+  | grep -oE '"emailVerificationRequired"[[:space:]]*:[[:space:]]*(true|false)' \
+  | head -1 | grep -oE '(true|false)$' || true)"
 
-if [ -n "$TOKEN" ]; then
-  ok "el login devuelve access token"
+LOGIN="$(api_post "/api/v1/auth/login" "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")"
+LOG_STATUS="${LOGIN%%|*}"
+LOG_BODY="${LOGIN#*|}"
 
-  ME="$(curl -s -w '\n%{http_code}' --max-time 20 \
-    -H "Authorization: Bearer $TOKEN" "$API/api/v1/auth/me" 2>&1)"
-  ME_STATUS="$(printf '%s' "$ME" | tail -n1)"
-
-  if [ "$ME_STATUS" = "200" ]; then
-    ok "GET /auth/me con token (200)"
+if [ "$REQUIRES_VERIFICATION" = "true" ]; then
+  # Sin verificar: el login tiene que RECHAZAR, no devolver token.
+  if printf '%s' "$LOG_BODY" | grep -q 'AUTH_EMAIL_NOT_VERIFIED'; then
+    ok "login sin correo verificado rechazado (AUTH_EMAIL_NOT_VERIFIED, $LOG_STATUS)"
   else
-    ko "GET /auth/me con token" "recibido $ME_STATUS"
+    ko "login sin correo verificado" "se esperaba AUTH_EMAIL_NOT_VERIFIED, recibido $LOG_STATUS"
   fi
 else
-  ko "el login devuelve access token" "no se encontro accessToken en la respuesta"
+  TOKEN="$(printf '%s' "$LOG_BODY" | grep -oE '"accessToken"[[:space:]]*:[[:space:]]*"[^"]*"' \
+    | head -1 | cut -d'"' -f4)"
+
+  if [ "$LOG_STATUS" = "200" ] && [ -n "$TOKEN" ]; then
+    ok "el login devuelve access token"
+
+    ME="$(curl -s -w '\n%{http_code}' --max-time 20 \
+      -H "Authorization: Bearer $TOKEN" "$API/api/v1/auth/me" 2>&1)"
+    ME_STATUS="$(printf '%s' "$ME" | tail -n1)"
+
+    case "$ME_STATUS" in
+      200)
+        ok "GET /auth/me con token (200)"
+        ;;
+      403)
+        # El token es valido (si no lo fuera, seria 401), pero el usuario que
+        # acaba de registrarse no tiene plan de suscripcion y el backend
+        # responde SUBSCRIPTION_REQUIRED. Tambien es parte del contrato.
+        if printf '%s' "$ME" | grep -q 'SUBSCRIPTION_REQUIRED'; then
+          ok "GET /auth/me con token (403 SUBSCRIPTION_REQUIRED: el usuario no tiene plan)"
+        else
+          ko "GET /auth/me con token" "recibido $ME_STATUS"
+        fi
+        ;;
+      *)
+        ko "GET /auth/me con token" "recibido $ME_STATUS"
+        ;;
+    esac
+  else
+    ko "el login devuelve access token" "recibido $LOG_STATUS"
+  fi
 fi
 
 # --- Frontend ---
-echo
-echo "== Frontend =="
-# Solo se comprueban las rutas que existen hoy. `/login` y `/register` estan
-# pendientes de construccion (front#12 y el resto del sprint 3): incluirlas
-# aqui haria que el smoke test fallara siempre por un motivo que no es del
-# despliegue.
+echo >&2
+echo "== Frontend ==" >&2
+# `/` es una ruta protegida: el proxy del frontend (proxy.ts) la redirige a
+# `/login` (307) cuando no hay sesion. Un 200 tambien vale (si el ambiente
+# deja pasar la peticion), pero un 307 tiene que ser a `/login`: eso es
+# justamente la proteccion funcionando.
 for path in "/"; do
   status="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$WEB$path" 2>&1)"
-  if [ "$status" = "200" ]; then
-    ok "GET $path (200)"
-  else
-    ko "GET $path" "recibido $status"
-  fi
+  case "$status" in
+    200)
+      ok "GET $path (200)"
+      ;;
+    307)
+      location="$(curl -s -o /dev/null -D - --max-time 20 "$WEB$path" 2>&1 \
+        | grep -i '^location:' | tr -d '\r' | awk '{print $2}')"
+      case "$location" in
+        */login*) ok "GET $path (307 -> /login, ruta protegida)" ;;
+        *) ko "GET $path" "307 a '$location' (se esperaba /login)" ;;
+      esac
+      ;;
+    *)
+      ko "GET $path" "recibido $status"
+      ;;
+  esac
 done
 
 # El proxy de la API tiene que funcionar: es lo que permite que el
@@ -140,7 +205,7 @@ else
   ko "proxy /api/v1/health/live desde el frontend" "recibido $PROXY_STATUS"
 fi
 
-echo
+echo >&2
 log "resultado: $PASS correctos, $FAIL fallidos"
 
 if [ "$FAIL" -gt 0 ]; then
