@@ -200,6 +200,9 @@ jobs:
             -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             "umask 077 && base64 -d > '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/.env'"
+      # `SCHEMA_FORCE=1`: la base de rehearsal es de prueba (datos
+      # desechables), asi que si el schema cambio se recrea. En produccion NO:
+      # ahi el deploy se detiene antes de borrar nada.
 
       - name: Desplegar
         env:
@@ -220,6 +223,7 @@ jobs:
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             "ORG_DIR='${{ secrets.ORG_PATH }}' \
              COMPOSE_PROJECT_NAME=doly-rehearsal \
+             SCHEMA_FORCE=1 \
              DB_HOST_PORT=57040 BACKEND_HOST_PORT=57041 FRONTEND_HOST_PORT=57042 \
              IMAGE_TAG='$TAG' \
              bash '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/scripts/deploy-env.sh'"

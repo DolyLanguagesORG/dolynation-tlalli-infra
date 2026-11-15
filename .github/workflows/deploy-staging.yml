@@ -258,6 +258,9 @@ jobs:
 
           echo "::error::El ambiente de simulacion no sirvio la version $VERSION a tiempo: staging NO se despliega."
           exit 1
+      # `SCHEMA_FORCE=1`: la base de staging es de prueba (datos
+      # desechables), asi que si el schema cambio se recrea. En produccion NO:
+      # ahi el deploy se detiene antes de borrar nada.
 
       - name: Desplegar
         env:
@@ -278,6 +281,7 @@ jobs:
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             "ORG_DIR='${{ secrets.ORG_PATH }}' \
              COMPOSE_PROJECT_NAME=doly-staging \
+             SCHEMA_FORCE=1 \
              DB_HOST_PORT=57020 BACKEND_HOST_PORT=57021 FRONTEND_HOST_PORT=57022 \
              IMAGE_TAG='$TAG' \
              bash '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/scripts/deploy-env.sh'"

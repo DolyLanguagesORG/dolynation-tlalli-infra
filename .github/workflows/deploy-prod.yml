@@ -202,6 +202,9 @@ jobs:
             -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             "umask 077 && base64 -d > '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/.env'"
+      # Sin `SCHEMA_FORCE`: en produccion la base NUNCA se recrea si tiene
+      # datos. Si el schema cambio, el deploy se detiene y hay que migrar a
+      # mano (`database/postgres/updates/NN-*.sql`, fase 2).
 
       - name: Desplegar
         env:
