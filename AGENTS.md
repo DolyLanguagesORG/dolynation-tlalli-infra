@@ -16,16 +16,23 @@ Están en `.agents/skills/` y se cargan bajo demanda:
 
 - **`infra-docker`** — cómo levantar Postgres/backend, puertos, volúmenes y
   troubleshooting de Compose.
-- **`schema-migrations`** — regla de dos fases, idempotencia, `01-init.sql` y
-  `updates/NN-*.sql`.
+- **`schema-migrations`** — el schema en un solo archivo (`01-init.sql`), el
+  runner `scripts/apply-schema.sh` y la fase de `updates/NN-*.sql` cuando
+  haya datos en producción.
 - **`ci-cd-release`** — CI, entornos, `rc`, release-please, cascada y deploy.
 
 ## Reglas rápidas
 
 - **El schema es la fuente de verdad.** Un cambio de tablas/columnas se hace
   aquí, no en el backend.
-- Antes del primer deploy real a prod: mantener `01-init.sql` y `updates/`
-  sincronizados. Después: `01-init.sql` se congela y solo se agregan updates.
+- **El schema vive en un solo archivo**: `database/postgres/01-init.sql`. No
+  hay carpeta `updates/` mientras producción no tenga datos.
+- `scripts/apply-schema.sh` (lo ejecutan los deploys) compara el hash del
+  schema con el guardado en la base y, si cambió, la recrea. **Un cambio de
+  schema y un deploy son la misma operación.**
+- Si la base **tiene datos** y el schema cambia, el runner **no** borra nada y
+  el deploy se detiene: hay que migrar a mano con `updates/NN-*.sql`
+  (fase 2, activada cuando producción tenga datos reales).
 - Todo update debe ser **idempotente**. PostgreSQL 15 no soporta
   `DROP COLUMN IF EXISTS`.
 - No commitear `.env` ni secretos. Usar `.env.example`.

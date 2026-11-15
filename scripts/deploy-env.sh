@@ -95,15 +95,27 @@ log "Descargando imagenes"
 docker pull "$BACKEND_IMAGE"
 docker pull "$FRONTEND_IMAGE"
 
-# --- 5. Levantar el stack -------------------------------------------------
+# --- 5. Aplicar el schema ANTES de levantar el stack -----------------------
+# El schema vive en este repo (`database/postgres/01-init.sql`). Si cambio,
+# la base de este ambiente tiene que quedar con el schema nuevo **antes** de
+# que arranque el backend de la version nueva: si no, el backend revienta con
+# HTTP 500 en cuanto toca una tabla o columna nueva.
+#
+# En staging/produccion NO se usa `FORCE=1`: si la base ya tiene datos y el
+# schema cambio, el script se niega a recrearla y el deploy se detiene. Ahi
+# toca migrar a mano (ver conventions/database.md).
 export COMPOSE_PROJECT_NAME="$PROJECT"
 export BACKEND_TAG
 export FRONTEND_TAG
 
+log "Aplicando el schema"
+COMPOSE_FILE="$COMPOSE_FILE" bash "$REPO/scripts/apply-schema.sh"
+
+# --- 6. Levantar el stack -------------------------------------------------
 log "Levantando el stack ($PROJECT)"
 docker compose -f "$COMPOSE_FILE" up -d --remove-orphans
 
-# --- 6. Healthcheck -------------------------------------------------------
+# --- 7. Healthcheck -------------------------------------------------------
 HEALTH_URL="${HEALTH_URL:-http://localhost:${BACKEND_HOST_PORT:-57021}/api/v1/health/ready}"
 
 log "Healthcheck $HEALTH_URL"

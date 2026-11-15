@@ -33,6 +33,8 @@ services:
       - "127.0.0.1:57010:5432"
     volumes:
       - doly-dev-pgdata:/var/lib/postgresql/data
+      # El schema: se aplica en el primer arranque (volumen vacio). Cuando
+      # cambie, `scripts/apply-schema.sh` recrea la base de desarrollo.
       - ./database/postgres:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
