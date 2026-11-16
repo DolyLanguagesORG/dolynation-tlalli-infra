@@ -124,7 +124,12 @@ jobs:
                  tar -xzf - -C '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra' && \
                  chmod +x '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra'/scripts/*.sh"
 
-      - name: Escribir el .env del entorno
+      # La base la crea Postgres con POSTGRES_* y el backend conecta con la
+      # MISMA base: sus credenciales se derivan de ahi (ver
+      # docker-compose.env.yml). Los secrets DB_* ya no se usan, pero si
+      # alguien los define y **difieren** de POSTGRES_*, avisamos: es la
+      # causa de un 503 "Database is unreachable" sin explicacion.
+      - name: Avisar si las credenciales de la base no coinciden
         env:
           POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
@@ -132,6 +137,23 @@ jobs:
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_DATABASE: ${{ secrets.DB_DATABASE }}
+        run: |
+          set -euo pipefail
+          if [ -n "$DB_USER" ] && [ "$DB_USER" != "$POSTGRES_USER" ]; then
+            echo "::warning::DB_USER no coincide con POSTGRES_USER. No se usa: el compose deriva del POSTGRES_USER."
+          fi
+          if [ -n "$DB_PASSWORD" ] && [ "$DB_PASSWORD" != "$POSTGRES_PASSWORD" ]; then
+            echo "::warning::DB_PASSWORD no coincide con POSTGRES_PASSWORD. No se usa: el compose deriva del POSTGRES_PASSWORD."
+          fi
+          if [ -n "$DB_DATABASE" ] && [ "$DB_DATABASE" != "$POSTGRES_DB" ]; then
+            echo "::warning::DB_DATABASE no coincide con POSTGRES_DB. No se usa: el compose deriva del POSTGRES_DB."
+          fi
+
+      - name: Escribir el .env del entorno
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
           MINIMAX_MODEL: ${{ secrets.MINIMAX_MODEL }}
@@ -180,9 +202,9 @@ jobs:
 
           # El .env lo escribe el workflow, no lo genera el servidor: asi
           # los secretos nunca pasan por un archivo en disco del servidor.
-          CONTENT="$(printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\nDB_USER=%s\nDB_PASSWORD=%s\nDB_DATABASE=%s\nJWT_SECRET=%s\nJWT_ACCESS_TTL=%s\nAI_DEFAULT_PROVIDER=%s\nMINIMAX_API_KEY=%s\nMINIMAX_MODEL=%s\nMINIMAX_REASONING_EFFORT=%s\nGOOGLE_API_KEY=%s\nGOOGLE_MODEL=%s\nOPENAI_API_KEY=%s\nOPENAI_MODERATION_ENDPOINT=%s\nOPENAI_MODERATION_MODEL=%s\nCATEGORY_MODERATION_ENABLED=%s\nCATEGORY_MODERATION_AI_ENABLED=%s\nCATEGORY_MODERATION_AI_PROVIDER=%s\nCATEGORY_DAILY_LIMIT=%s\nCATEGORY_MODERATION_SCORE_THRESHOLD=%s\nCATEGORY_MODERATION_TIMEOUT_MS=%s\nCATEGORY_MODERATION_CACHE_TTL_MS=%s\nSMTP_HOST=%s\nSMTP_PORT=%s\nSMTP_USER=%s\nSMTP_PASSWORD=%s\nSMTP_FROM=%s\nSMTP_FROM_NAME=%s\nSMTP_SECURE=%s\nFRONTEND_BASE_URL=%s\nEMAIL_VERIFICATION_REQUIRED=%s\n' \
+          CONTENT="$(printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\nJWT_SECRET=%s\nJWT_ACCESS_TTL=%s\nAI_DEFAULT_PROVIDER=%s\nMINIMAX_API_KEY=%s\nMINIMAX_MODEL=%s\nMINIMAX_REASONING_EFFORT=%s\nGOOGLE_API_KEY=%s\nGOOGLE_MODEL=%s\nOPENAI_API_KEY=%s\nOPENAI_MODERATION_ENDPOINT=%s\nOPENAI_MODERATION_MODEL=%s\nCATEGORY_MODERATION_ENABLED=%s\nCATEGORY_MODERATION_AI_ENABLED=%s\nCATEGORY_MODERATION_AI_PROVIDER=%s\nCATEGORY_DAILY_LIMIT=%s\nCATEGORY_MODERATION_SCORE_THRESHOLD=%s\nCATEGORY_MODERATION_TIMEOUT_MS=%s\nCATEGORY_MODERATION_CACHE_TTL_MS=%s\nSMTP_HOST=%s\nSMTP_PORT=%s\nSMTP_USER=%s\nSMTP_PASSWORD=%s\nSMTP_FROM=%s\nSMTP_FROM_NAME=%s\nSMTP_SECURE=%s\nFRONTEND_BASE_URL=%s\nEMAIL_VERIFICATION_REQUIRED=%s\n' \
             "$POSTGRES_USER" "$POSTGRES_PASSWORD" "$POSTGRES_DB" \
-            "$DB_USER" "$DB_PASSWORD" "$DB_DATABASE" "$JWT_SECRET" \
+            "$JWT_SECRET" \
             "$JWT_ACCESS_TTL" "$AI_DEFAULT_PROVIDER" \
             "$MINIMAX_API_KEY" "$MINIMAX_MODEL" "$MINIMAX_REASONING_EFFORT" \
             "$GOOGLE_API_KEY" "$GOOGLE_MODEL" \
