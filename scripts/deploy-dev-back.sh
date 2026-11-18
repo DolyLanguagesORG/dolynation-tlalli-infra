@@ -62,8 +62,10 @@ echo "$LOCK_HASH" > "$LOCK_STAMP"
 # asi que se inyectan aqui en el `.env` que el contenedor ya lee.
 #
 # - GIT_COMMIT: el SHA exacto que quedo desplegado.
-# - APP_VERSION: la version declarada en el package.json de ese commit, que es
-#   la que release-please mantiene al dia en `develop`.
+# - APP_VERSION: la version de la APLICACION (la que compone `versions.yml`,
+#   el maximo entre backend y frontend). Se lee del manifiesto, que esta en
+#   este mismo repo: asi desarrollo responde la misma version que staging y
+#   produccion, en vez de la del paquete.
 #
 # Se leen del codigo ya desplegado, no del remoto, para que coincidan con lo
 # que esta corriendo de verdad. La version se lee dentro del contenedor: el
@@ -73,7 +75,12 @@ echo "$LOCK_HASH" > "$LOCK_STAMP"
 # que se le anaden estas dos lineas al final (el archivo es del usuario
 # `ddeploy`, que es quien ejecuta el script).
 GIT_COMMIT_SHA="$(git rev-parse HEAD)"
-APP_VERSION_VALUE="$(docker exec "$CONTAINER" node -p "require('/app/package.json').version" 2>/dev/null || echo '')"
+MANIFEST="${MANIFEST:-$ORG_DIR/dolynation-tlalli-infra/versions.yml}"
+APP_VERSION_VALUE="$(grep -E '^app_version:' "$MANIFEST" 2>/dev/null | head -1 | cut -d: -f2 | tr -d ' \042\047')"
+if [ -z "$APP_VERSION_VALUE" ]; then
+  # Sin manifiesto (o sin fila), se usa la version del paquete.
+  APP_VERSION_VALUE="$(docker exec "$CONTAINER" node -p "require('/app/package.json').version" 2>/dev/null || echo '')"
+fi
 
 if [ -n "$APP_VERSION_VALUE" ]; then
   log "Inyectando GIT_COMMIT=$GIT_COMMIT_SHA APP_VERSION=$APP_VERSION_VALUE"

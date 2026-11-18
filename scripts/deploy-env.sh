@@ -117,6 +117,10 @@ docker pull "$FRONTEND_IMAGE"
 export COMPOSE_PROJECT_NAME="$PROJECT"
 export BACKEND_TAG
 export FRONTEND_TAG
+# La version de la APLICACION (la que compone `versions.yml`). Se exporta
+# para que la llegue a los contenedores: es la que responden `/version` y la
+# cabecera `X-App-Version`.
+export APP_VERSION
 
 log "Aplicando el schema (SCHEMA_FORCE=$SCHEMA_FORCE)"
 FORCE="$SCHEMA_FORCE" COMPOSE_FILE="$COMPOSE_FILE" bash "$REPO/scripts/apply-schema.sh"
