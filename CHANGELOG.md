@@ -11,6 +11,13 @@ un PR de release contra `develop` que sube la versión y escribe esta sección; 
 mergearlo se crean el tag anotado y la GitHub Release. Ver
 [`conventions/versioning.md`](https://github.com/DolyLanguagesORG/dolynation-ehecatl-docs/blob/develop/conventions/versioning.md).
 
+## [0.6.6](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.6.5...v0.6.6) (2026-11-18)
+
+
+### Bug Fixes
+
+* **deploy:** la version de la aplicacion la inyecta el deploy ([#176](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/176)) ([95f64a6](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/95f64a6fae2d9f23fe4ea11a5df9dac5eab58718)), closes [#121](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/121)
+
 ## [0.6.5](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.6.4...v0.6.5) (2026-11-16)
 
 
