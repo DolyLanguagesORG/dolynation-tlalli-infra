@@ -52,9 +52,9 @@ DB_CONTAINER="${DB_CONTAINER:-}"
 FORCE="${FORCE:-0}"
 CHECK_ONLY="${CHECK_ONLY:-0}"
 
-# Las 10 tablas que el backend mapea con Drizzle. Si falta alguna, el schema
+# Las 13 tablas que el backend mapea con Drizzle. Si falta alguna, el schema
 # esta mal y el backend revienta al primer query.
-EXPECTED_TABLES="users user_settings admins auth_access_tokens auth_email_tokens readings reading_explanations prompt_logs moderated_categories category_daily_usage"
+EXPECTED_TABLES="roles users user_settings auth_access_tokens auth_email_tokens access_requests readings reading_explanations prompt_logs moderated_categories category_daily_usage audit_logs error_logs"
 # Los nombres van entre comillas simples: en SQL son valores, no columnas.
 EXPECTED_TABLES_SQL="$(echo "$EXPECTED_TABLES" | tr ' ' ',' | sed "s/[a-zA-Z_][a-zA-Z0-9_]*/'&'/g")"
 
@@ -217,14 +217,14 @@ wait_ready || die "la base no acepto conexiones tras 90s"
 APPLIED=0
 for _ in $(seq 1 45); do
   sleep 2
-  if [ "$(psql_q "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ($EXPECTED_TABLES_SQL);" | tr -d '[:space:]')" = "10" ]; then
+  if [ "$(psql_q "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ($EXPECTED_TABLES_SQL);" | tr -d '[:space:]')" = "13" ]; then
     APPLIED=1
     break
   fi
 done
 [ "$APPLIED" = "1" ] || die "el schema no quedo aplicado tras 90s"
 
-log "Schema aplicado: las 10 tablas del backend estan."
+log "Schema aplicado: las 13 tablas del backend estan."
 
 # --- 8. Guardar el hash -----------------------------------------------------
 # La tabla se crea otra vez: si la base se recreo, se fue con ella.
