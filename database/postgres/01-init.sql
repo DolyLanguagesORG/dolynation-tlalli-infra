@@ -1,9 +1,30 @@
+-- Tabla: roles
+-- Roles del sistema (`student`, `admin`). Reemplaza a la tabla temporal `admins`.
+CREATE TABLE roles (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(30) NOT NULL UNIQUE,
+  description VARCHAR(255),
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO roles (id, name, description) VALUES
+  (1, 'student', 'Usuario estudiante con acceso a lecturas y suscripciones'),
+  (2, 'admin', 'Administrador del sistema con acceso exclusivo al panel de gestión')
+ON CONFLICT (name) DO NOTHING;
+
+SELECT setval(
+  pg_get_serial_sequence('roles', 'id'),
+  COALESCE((SELECT MAX(id) FROM roles), 1),
+  true
+);
+
 -- Tabla: users
 CREATE TABLE users (
   id SERIAL PRIMARY KEY,
   full_name VARCHAR(255),
   email VARCHAR(254) NOT NULL UNIQUE,
   password VARCHAR(255) NOT NULL,
+  role_id INTEGER NOT NULL DEFAULT 1 REFERENCES roles(id),
   subscription_tier VARCHAR(30) DEFAULT NULL,
   current_streak INTEGER NOT NULL DEFAULT 0,
   last_streak_date DATE,
@@ -16,6 +37,8 @@ CREATE TABLE users (
   updated_at TIMESTAMP,
   deleted_at TIMESTAMP
 );
+
+CREATE INDEX idx_users_role_id ON users(role_id);
 
 -- Tabla: user_settings
 -- Preferencias de estudio por usuario (idiomas ordenados por prioridad,
@@ -31,6 +54,7 @@ CREATE TABLE user_settings (
   last_language_change_at TIMESTAMP,
   language_change_credits INTEGER NOT NULL DEFAULT 0,
   preferred_categories JSONB NOT NULL DEFAULT '[]'::jsonb,
+  saved_categories JSONB NOT NULL DEFAULT '[]'::jsonb,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP
 );
@@ -38,17 +62,30 @@ CREATE TABLE user_settings (
 -- Índices para user_settings
 CREATE INDEX idx_user_settings_user_id ON user_settings(user_id);
 
--- Tabla: admins
--- Administradores de la aplicacion. Va aparte de `users` a proposito: los
--- SELECTs sobre `users` no cambian, y el rol de administrador no se mezcla
--- con los datos del perfil.
-CREATE TABLE admins (
-  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  granted_at TIMESTAMP NOT NULL DEFAULT NOW()
+-- Tabla: access_requests
+-- Solicitudes de acceso a planes de suscripción o desbloqueo de cambio de idioma
+-- enviadas por los usuarios cuando `ACCESS_REQUESTS_ENABLED=true`.
+CREATE TABLE access_requests (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  request_type VARCHAR(30) NOT NULL,
+  requested_tier VARCHAR(30),
+  current_tier VARCHAR(30),
+  user_message TEXT,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  rejection_reason TEXT,
+  reviewed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Índices para admins
-CREATE INDEX idx_admins_user_id ON admins(user_id);
+CREATE INDEX idx_access_requests_user_id ON access_requests(user_id);
+CREATE INDEX idx_access_requests_status ON access_requests(status);
+CREATE INDEX idx_access_requests_user_type_status ON access_requests(user_id, request_type, status);
+CREATE UNIQUE INDEX uq_access_requests_pending_per_user_type
+  ON access_requests(user_id, request_type)
+  WHERE status = 'pending';
 
 -- Tabla: auth_access_tokens
 CREATE TABLE auth_access_tokens (
@@ -146,6 +183,10 @@ CREATE TABLE prompt_logs (
     seed VARCHAR(255),
     user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     text_id INTEGER REFERENCES readings(id) ON DELETE SET NULL,
+    request_id VARCHAR(64),
+    ip_address VARCHAR(64),
+    provider VARCHAR(30),
+    model VARCHAR(60),
     params JSONB,
     system_prompt TEXT,
     user_prompt TEXT,
@@ -160,11 +201,12 @@ CREATE INDEX idx_prompt_logs_level ON prompt_logs(level);
 CREATE INDEX idx_prompt_logs_event ON prompt_logs(event);
 CREATE INDEX idx_prompt_logs_seed ON prompt_logs(seed);
 CREATE INDEX idx_prompt_logs_user_id ON prompt_logs(user_id);
+CREATE INDEX idx_prompt_logs_request_id ON prompt_logs(request_id);
 CREATE INDEX idx_prompt_logs_created_at ON prompt_logs(created_at);
 CREATE INDEX idx_prompt_logs_user_created ON prompt_logs(user_id, created_at);
 CREATE INDEX idx_prompt_logs_event_created ON prompt_logs(event, created_at);
 
--- Tabla: moderated_categories (caché permanente de moderación y blueprint de prompt por clave canónica)
+-- Tabla: moderated_categories (caché interna permanente de moderación y blueprint de prompt por clave canónica; no es catálogo global de usuarios)
 CREATE TABLE moderated_categories (
     canonical_key VARCHAR(120) PRIMARY KEY,
     sample_category VARCHAR(100) NOT NULL,
@@ -189,3 +231,77 @@ CREATE TABLE category_daily_usage (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_category_daily_usage_user_day_key UNIQUE (user_id, usage_date, canonical_key)
 );
+
+-- Tabla: audit_logs (trazabilidad completa de operaciones, cambios CRUD before/after y eventos del sistema)
+CREATE TABLE audit_logs (
+    id SERIAL PRIMARY KEY,
+    request_id VARCHAR(64),
+    actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    actor_email VARCHAR(254),
+    actor_role VARCHAR(30),
+    target_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    ip_address VARCHAR(64),
+    user_agent TEXT,
+    http_method VARCHAR(10),
+    http_path VARCHAR(500),
+    http_status INTEGER,
+    module VARCHAR(50) NOT NULL,
+    action VARCHAR(30) NOT NULL,
+    event VARCHAR(100) NOT NULL,
+    entity_type VARCHAR(60),
+    entity_id VARCHAR(120),
+    summary TEXT NOT NULL,
+    before_state JSONB,
+    after_state JSONB,
+    changed_fields JSONB NOT NULL DEFAULT '[]'::jsonb,
+    metadata JSONB,
+    duration_ms INTEGER,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para audit_logs
+CREATE INDEX idx_audit_logs_request_id ON audit_logs(request_id);
+CREATE INDEX idx_audit_logs_actor_user_id ON audit_logs(actor_user_id);
+CREATE INDEX idx_audit_logs_target_user_id ON audit_logs(target_user_id);
+CREATE INDEX idx_audit_logs_module_action ON audit_logs(module, action);
+CREATE INDEX idx_audit_logs_event ON audit_logs(event);
+CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
+CREATE INDEX idx_audit_logs_ip_address ON audit_logs(ip_address);
+CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at DESC);
+CREATE INDEX idx_audit_logs_actor_created ON audit_logs(actor_user_id, created_at DESC);
+
+-- Tabla: error_logs (registro centralizado de fallos HTTP 4xx/5xx, excepciones no controladas, fallos SMTP/IA/moderación)
+CREATE TABLE error_logs (
+    id SERIAL PRIMARY KEY,
+    request_id VARCHAR(64),
+    severity VARCHAR(20) NOT NULL DEFAULT 'error',
+    source VARCHAR(40) NOT NULL,
+    module VARCHAR(50),
+    error_code VARCHAR(80) NOT NULL,
+    http_status INTEGER,
+    message TEXT NOT NULL,
+    error_name VARCHAR(120),
+    error_stack TEXT,
+    actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    actor_email VARCHAR(254),
+    actor_role VARCHAR(30),
+    ip_address VARCHAR(64),
+    user_agent TEXT,
+    http_method VARCHAR(10),
+    http_path VARCHAR(500),
+    request_body JSONB,
+    request_query JSONB,
+    details JSONB,
+    duration_ms INTEGER,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para error_logs
+CREATE INDEX idx_error_logs_request_id ON error_logs(request_id);
+CREATE INDEX idx_error_logs_severity ON error_logs(severity);
+CREATE INDEX idx_error_logs_source ON error_logs(source);
+CREATE INDEX idx_error_logs_error_code ON error_logs(error_code);
+CREATE INDEX idx_error_logs_http_status ON error_logs(http_status);
+CREATE INDEX idx_error_logs_actor_user_id ON error_logs(actor_user_id);
+CREATE INDEX idx_error_logs_ip_address ON error_logs(ip_address);
+CREATE INDEX idx_error_logs_created_at ON error_logs(created_at DESC);
