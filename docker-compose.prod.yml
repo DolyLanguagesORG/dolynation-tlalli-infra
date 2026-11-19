@@ -66,6 +66,9 @@ services:
       - FRONTEND_BASE_URL=${FRONTEND_BASE_URL}
       # Exige confirmar el correo antes de poder iniciar sesion.
       - EMAIL_VERIFICATION_REQUIRED=${EMAIL_VERIFICATION_REQUIRED}
+      # Habilita solicitudes con aprobacion de administrador para planes y desbloqueo de idioma.
+      - ACCESS_REQUESTS_ENABLED=${ACCESS_REQUESTS_ENABLED:-true}
+      - ADMIN_NOTIFICATION_EMAIL=${ADMIN_NOTIFICATION_EMAIL:-}
     ports:
       - "57001:3333"
     networks:
