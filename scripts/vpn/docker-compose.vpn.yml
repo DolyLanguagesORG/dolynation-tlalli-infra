@@ -1,0 +1,99 @@
+# Peers de servicio de la VPN de DolyNation.
+#
+# Cada servicio es un peer con su propia identidad criptografica:
+#   devapi  10.90.0.2   termina TLS+mTLS y reenvia al backend de dev
+#   devweb  10.90.0.3   termina TLS+mTLS y reenvia al frontend de dev
+#   minios  10.90.0.4   el almacenamiento de objetos (S3)
+#
+# El trafico sale de la VPN hacia el hub, que lo reenruta. El servicio no
+# publica ningun puerto en la red de Docker: su unica entrada es la
+# interfaz de tunel.
+#
+# Este archivo NO lleva material secreto: las llaves y los certificados
+# vienen montados de /etc/doly-vpn/runtime, que solo root puede leer.
+
+name: doly-vpn
+
+x-peer: &peer
+  image: doly-vpn-peer:local
+  restart: unless-stopped
+  cap_add:
+    - NET_ADMIN
+  devices:
+    - /dev/net/tun:/dev/net/tun
+  # El hub se alcanza por la red interna: el servidor no hace NAT de sus
+  # propias IP publicas hacia dentro (hairpin). El endpoint lo pone el
+  # script que genera el runtime de cada peer.
+
+services:
+  devapi:
+    <<: *peer
+    container_name: doly-vpn-devapi
+    environment:
+      PEER_NAME: devapi
+      APP_TARGET: backend:3333
+      LISTEN_PORT: "443"
+    volumes:
+      - /etc/doly-vpn/runtime/devapi:/etc/wireguard:ro
+    networks:
+      vpn:
+        ipv4_address: 10.98.0.2
+      dev: {}
+
+  devweb:
+    <<: *peer
+    container_name: doly-vpn-devweb
+    environment:
+      PEER_NAME: devweb
+      APP_TARGET: frontend:3000
+      LISTEN_PORT: "443"
+    volumes:
+      - /etc/doly-vpn/runtime/devweb:/etc/wireguard:ro
+    networks:
+      vpn:
+        ipv4_address: 10.98.0.3
+      dev: {}
+
+  minios:
+    build:
+      context: .
+      dockerfile: Dockerfile.minio
+    image: doly-vpn-minio:local
+    container_name: doly-vpn-minios
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      PEER_NAME: minios
+      APP_TARGET: minio:9000
+      LISTEN_PORT: "50090"
+      MINIO_BROWSER_REDIRECT_URL: https://minios.doly.internal:50091
+    # Las credenciales de MinIO estan en un fichero 600 que solo root lee.
+    # Nunca en el compose ni en un repo.
+    env_file:
+      - /etc/doly-vpn/runtime/minio/minio.env
+    volumes:
+      - /etc/doly-vpn/runtime/minios:/etc/wireguard:ro
+      - minio-data:/data
+    networks:
+      vpn:
+        ipv4_address: 10.98.0.4
+
+volumes:
+  minio-data:
+    name: doly-vpn-minio-data
+
+networks:
+  vpn:
+    name: doly-vpn-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.98.0.0/24
+  # La red del ambiente de desarrollo: los peers alcanzan al backend y al
+  # frontend por su nombre de servicio.
+  dev:
+    name: doly-dev-net
+    external: true
