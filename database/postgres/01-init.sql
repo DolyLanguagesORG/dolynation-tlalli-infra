@@ -26,6 +26,7 @@ CREATE TABLE users (
   password VARCHAR(255) NOT NULL,
   role_id INTEGER NOT NULL DEFAULT 1 REFERENCES roles(id),
   subscription_tier VARCHAR(30) DEFAULT NULL,
+  stripe_customer_id VARCHAR(64),
   current_streak INTEGER NOT NULL DEFAULT 0,
   last_streak_date DATE,
   -- Marca de verificación del correo. NULL = la cuenta todavía no confirmó su correo.
@@ -39,6 +40,9 @@ CREATE TABLE users (
 );
 
 CREATE INDEX idx_users_role_id ON users(role_id);
+CREATE UNIQUE INDEX uq_users_stripe_customer_id
+  ON users(stripe_customer_id)
+  WHERE stripe_customer_id IS NOT NULL;
 
 -- Tabla: user_settings
 -- Preferencias de estudio por usuario (idiomas ordenados por prioridad,
@@ -305,3 +309,63 @@ CREATE INDEX idx_error_logs_http_status ON error_logs(http_status);
 CREATE INDEX idx_error_logs_actor_user_id ON error_logs(actor_user_id);
 CREATE INDEX idx_error_logs_ip_address ON error_logs(ip_address);
 CREATE INDEX idx_error_logs_created_at ON error_logs(created_at DESC);
+
+-- Tabla: billing_subscriptions (espejo de la suscripción recurrente en Stripe por usuario)
+CREATE TABLE billing_subscriptions (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  provider VARCHAR(20) NOT NULL DEFAULT 'stripe',
+  stripe_customer_id VARCHAR(64) NOT NULL,
+  stripe_subscription_id VARCHAR(64) NOT NULL UNIQUE,
+  stripe_price_id VARCHAR(64) NOT NULL,
+  tier VARCHAR(30) NOT NULL,
+  status VARCHAR(30) NOT NULL,
+  current_period_start TIMESTAMP,
+  current_period_end TIMESTAMP,
+  cancel_at_period_end BOOLEAN NOT NULL DEFAULT FALSE,
+  canceled_at TIMESTAMP,
+  payment_method_brand VARCHAR(30),
+  payment_method_last4 VARCHAR(4),
+  payment_method_exp_month INTEGER,
+  payment_method_exp_year INTEGER,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_billing_subscriptions_customer ON billing_subscriptions(stripe_customer_id);
+CREATE INDEX idx_billing_subscriptions_status ON billing_subscriptions(status);
+
+-- Tabla: billing_payments (historial e idempotencia de pagos únicos y facturas de suscripción)
+CREATE TABLE billing_payments (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider VARCHAR(20) NOT NULL DEFAULT 'stripe',
+  kind VARCHAR(40) NOT NULL,
+  tier VARCHAR(30),
+  stripe_checkout_session_id VARCHAR(128) UNIQUE,
+  stripe_payment_intent_id VARCHAR(128),
+  stripe_invoice_id VARCHAR(128) UNIQUE,
+  amount_cents INTEGER NOT NULL DEFAULT 0,
+  currency VARCHAR(10) NOT NULL DEFAULT 'mxn',
+  status VARCHAR(30) NOT NULL DEFAULT 'pending',
+  fulfilled_at TIMESTAMP,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_billing_payments_user_created ON billing_payments(user_id, created_at DESC);
+CREATE INDEX idx_billing_payments_kind_status ON billing_payments(kind, status);
+
+-- Tabla: billing_webhook_events (registro de deduplicación e idempotencia por event_id de Stripe)
+CREATE TABLE billing_webhook_events (
+  event_id VARCHAR(120) PRIMARY KEY,
+  provider VARCHAR(20) NOT NULL DEFAULT 'stripe',
+  event_type VARCHAR(100) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'processing',
+  error_message TEXT,
+  processed_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_billing_webhook_events_type_created ON billing_webhook_events(event_type, created_at DESC);
