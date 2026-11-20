@@ -1,0 +1,94 @@
+# nginx del peer de servicio: TLS con mTLS y proxy hacia la aplicacion.
+#
+# El certificado del servidor lo firma la CA interna de DolyNation y lo
+# emite el hub (en el certificado del peer). El certificado de cliente lo
+# pide cada developer: sin el, la conexion se rechaza.
+#
+# El certificado de la CA va en ca.crt (intermedia + raiz), que es lo que
+# permite que el navegador de cada developer valide al servidor.
+
+user  nginx;
+worker_processes  auto;
+error_log  /dev/stderr warn;
+pid        /var/run/nginx.pid;
+
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    # La respuesta no lleva la version de nginx.
+    server_tokens off;
+
+    # El DNS de Docker: 127.0.0.11. Con un resolver, nginx vuelve a
+    # resolver el nombre del upstream cuando cambia su IP (el ambiente de
+    # desarrollo recrea sus contenedores al desplegar).
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
+    # Registro en stdout: los logs del contenedor.
+    log_format peer '$time_iso8601 $remote_addr cn=$ssl_client_s_dn';
+    access_log /dev/stdout peer;
+
+    # El certificado de cliente: la CA interna de DolyNation.
+    ssl_client_certificate  /etc/wireguard/ca.crt;
+    ssl_verify_client       on;
+    ssl_verify_depth        2;
+
+    # Solo TLS moderno. Nada de TLSv1.0 ni TLSv1.1.
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_ecdh_curve X25519:prime256v1:secp384r1;
+    ssl_session_cache shared:SSL:2m;
+    ssl_session_timeout 1h;
+    ssl_session_tickets off;
+
+    server {
+        # Se escucha en la IP de tunel: el puerto no se publica en la red
+        # de Docker, solo existe dentro de la VPN.
+        listen              ${TUNNEL_IP}:${LISTEN_PORT} ssl;
+        listen              [::]:${LISTEN_PORT} ssl;
+
+        server_name _;
+
+        ssl_certificate      /etc/wireguard/server.crt;
+        ssl_certificate_key  /etc/wireguard/server.key;
+
+        # Cabeceras de seguridad.
+        add_header Strict-Transport-Security "max-age=31536000" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+        client_max_body_size 2m;
+
+        location / {
+            # Con variable + resolver, el upstream se vuelve a resolver si
+            # el contenedor de la aplicacion cambia de IP. El host y el
+            # puerto van separados: `set` no admite `host:port`.
+            set $upstream_host "${APP_HOST}";
+            set $upstream_port "${APP_PORT}";
+            proxy_pass http://$upstream_host:$upstream_port;
+            proxy_http_version 1.1;
+
+            proxy_set_header Host              $host;
+            proxy_set_header X-Real-IP         $remote_addr;
+            proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Client-CN       $ssl_client_s_dn;
+
+            # El frontend proxea /api/v1 hacia el backend; la conexion es
+            # de larga duracion (watch mode), asi que sin timeout se
+            # cortaria a los 60 s.
+            proxy_read_timeout  120s;
+            proxy_send_timeout  120s;
+            proxy_connect_timeout 10s;
+
+            # WebSocket: el frontend en modo desarrollo los usa.
+            proxy_set_header Upgrade    $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+    }
+}
