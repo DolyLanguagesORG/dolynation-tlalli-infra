@@ -539,9 +539,36 @@ Que necesitas
 
 Como usarlo
 -----------
+Hay dos formas, y hacen lo mismo.
+
+### Con NetworkManager (el menu de red del escritorio)
+
+Es la forma mas comoda: la conexion ya esta creada ("wg-dev" y
+"wg-admin"). Conectate y desconectate desde el icono de red del panel,
+o con:
+
+  nmcli connection up wg-dev      # conectar
+  nmcli connection down wg-dev    # desconectar
+  nmcli connection show           # ver las conexiones
+
+Si tu sistema usa systemd-resolved, el DNS de la VPN necesita que
+NetworkManager se lo pase al resolved. Si al conectar el nombre
+`devapi.yacaterkos.tech` no resuelve a 10.90.0.2, anade esto y
+reinicia:
+
+  # /etc/NetworkManager/conf.d/00-dns.conf
+  [main]
+  dns=systemd-resolved
+  systemd-resolved=true
+
+  sudo systemctl restart NetworkManager
+
+### Con wg-quick (la terminal)
+
   sudo wg-quick up wg-dev      # identidad de desarrollo
   sudo wg-quick up wg-admin    # identidad de administracion
   sudo wg-quick down wg-dev    # bajar una identidad
+  sudo wg show wg-dev          # ver el estado (handshake, trafico)
 
 Si `wg-quick up` falla con "resolvconf: command not found" o con
 "signature mismatch", falta el resolvedor de DNS (ver el paso 1). Sin el,
