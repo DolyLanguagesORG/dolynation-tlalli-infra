@@ -61,16 +61,36 @@ WG_ENDPOINT = "141.148.148.45"
 WG_ENDPOINT_LOCAL = "10.98.0.1"
 
 # nombre, familia, IP, tipo, descripcion
+#
+# Jesus Alberto y Sebastian estan en las dos familias: desarrollan (y
+# necesitan hablar con los demas developers y con los servicios) y ademas
+# administran (y necesitan llegar a todo).
+#
+# Cada identidad es un peer con su PROPIA llave y su PROPIO PSK: son
+# identidades distintas, no la misma con dos permisos. Asi el peer de
+# desarrollo de Jesus no puede alcanzar la familia admin, aunque la
+# persona sea la misma. El firewall lo impide por IP de tunel, y la
+# separacion se ve en los logs (el CN del certificado de cliente dice
+# "jxadevp-dev" o "jxadevp-admin").
 PEERS = [
-    ("devapi",    "servicios", "10.90.0.2", "servicio", "API del ambiente de desarrollo"),
-    ("devweb",    "servicios", "10.90.0.3", "servicio", "Web del ambiente de desarrollo"),
-    ("minios",    "servicios", "10.90.0.4", "servicio", "Almacenamiento de objetos (S3)"),
-    ("jxadevp",   "admin",      "10.92.0.2", "admin",    "Jesus Alberto: administracion"),
-    ("sebastian", "devs",       "10.91.0.2", "dev",      "Sebastian: PO"),
-    ("azael",     "devs",       "10.91.0.3", "dev",      "Azael: backend"),
-    ("elias",     "devs",       "10.91.0.4", "dev",      "Elias: backend"),
-    ("y0adq1",    "devs",       "10.91.0.5", "dev",      "Juan Antonio: frontend"),
+    ("devapi",       "servicios", "10.90.0.2", "servicio", "API del ambiente de desarrollo"),
+    ("devweb",       "servicios", "10.90.0.3", "servicio", "Web del ambiente de desarrollo"),
+    ("minios",       "servicios", "10.90.0.4", "servicio", "Almacenamiento de objetos (S3)"),
+    ("jxadevp-dev",  "devs",      "10.91.0.6", "dev",      "Jesus Alberto: desarrollo"),
+    ("jxadevp-admin", "admin",     "10.92.0.2", "admin",    "Jesus Alberto: administracion"),
+    ("sebastian-dev", "devs",      "10.91.0.2", "dev",      "Sebastian: desarrollo"),
+    ("sebastian-admin", "admin",   "10.92.0.3", "admin",    "Sebastian: administracion"),
+    ("azael",        "devs",      "10.91.0.3", "dev",      "Azael: backend"),
+    ("elias",        "devs",      "10.91.0.4", "dev",      "Elias: backend"),
+    ("y0adq1",       "devs",      "10.91.0.5", "dev",      "Juan Antonio: frontend"),
 ]
+
+# Las personas con dos identidades: un solo paquete con las dos configs.
+# El resto, un paquete con una sola.
+PERSONAS_DUALES = {
+    "jxadevp":  ["jxadevp-dev",  "jxadevp-admin"],
+    "sebastian": ["sebastian-dev", "sebastian-admin"],
+}
 
 SERVICE_NAMES = {
     "devapi": "devapi.yacaterkos.tech",
@@ -353,6 +373,15 @@ def peers_init(only=None):
         seal_file(d / "tls-privatekey.sealed", tls_key, pw)
         write_secret(d / "publickey", pub + "\n", 0o644)
         write_secret(d / "ip", ip + "\n", 0o644)
+
+        # Las rutas que tendra este peer. Lo usan las comprobaciones para
+        # verificar que el peer de desarrollo NO tiene ruta hacia la
+        # familia de administracion.
+        if family == "admin":
+            allowed = [FAMILIES["servicios"], FAMILIES["devs"], FAMILIES["admin"]]
+        else:
+            allowed = [FAMILIES["servicios"], FAMILIES["devs"]]
+        write_secret(d / "allowed.txt", "\n".join(allowed) + "\n", 0o644)
         write_secret(d / "meta.json", json.dumps({
             "name": name, "family": family, "ip": ip, "kind": kind,
             "descripcion": desc, "publickey": pub,
@@ -475,9 +504,8 @@ def certs_issue():
 BUNDLE_README = """DolyNation — VPN de desarrollo
 ================================
 
-Peer:        {name}
-Familia:     {family}
-IP de tunel: {ip}
+Persona:     {name}
+Identidades: {identidades}
 
 Que es esto
 -----------
@@ -487,21 +515,38 @@ Acceso a los ambientes de desarrollo de DolyNation por una red privada
 Que necesitas
 -------------
 1. Instalar WireGuard (https://www.wireguard.com/install/).
-2. Copiar wg0.conf a /etc/wireguard/wg0.conf  (Linux)
-   o importarlo desde la app de WireGuard      (Windows/macOS).
+2. Copiar los ficheros de configuracion a /etc/wireguard/  (Linux)
+   o importarlos desde la app de WireGuard               (Windows/macOS).
 3. Instalar la CA publica en el sistema para que el navegador confie:
      Linux    sudo cp ca.crt /usr/local/share/ca-certificates/doly-vpn.crt
               sudo update-ca-certificates
      macOS    sudo security add-trusted-cert -d -r trustRoot \\
               -k /Library/Keychains/System.keychain ca.crt
      Windows  Importar en "Autoridades de certificacion raiz de confianza".
-4. (Opcional) Importar {name}.p12 en el navegador para el mTLS.
+4. Importar el .p12 de la identidad en el navegador para el mTLS.
    Contrasena del p12: la passphrase de la CA.
 
 Como usarlo
 -----------
-  sudo wg-quick up wg0        # levantar la VPN
-  sudo wg-quick down wg0      # bajarla
+  sudo wg-quick up wg-dev      # identidad de desarrollo
+  sudo wg-quick up wg-admin    # identidad de administracion
+  sudo wg-quick down wg-dev    # bajar una identidad
+
+Que son las identidades
+-----------------------
+Si tienes mas de un fichero de configuracion, son identidades distintas
+tuyas, con su propia llave y su propio PSK:
+
+  wg-dev.conf    Identidad de DESARROLLO. Alcanza los servicios de
+                 desarrollo y a los demas developers. NO alcanza la
+                 familia de administracion.
+  wg-admin.conf  Identidad de ADMINISTRACION. Alcanza todo.
+
+Son identidades separadas a proposito: la de desarrollo no puede tocar
+el plano de administracion, aunque la persona seas la misma. Asi una
+identidad que se filtra no arrastra a la otra.
+
+Cada identidad tiene su .p12, y el log del servidor dice cual se uso.
 
 Direcciones utiles (resuelven a la IP de tunel dentro de la VPN)
 ----------------------------------------------------------------
@@ -521,96 +566,129 @@ Notas
 
 
 def bundles_build(only=None):
-    """Arma el paquete cifrado de cada developer."""
+    """Arma el paquete cifrado de cada developer.
+
+    Quien tiene dos identidades (desarrollo y administracion) recibe un
+    paquete con las dos configs: `wg-dev.conf` y `wg-admin.conf`. Son
+    identidades separadas, con su propia llave y su propio PSK.
+    """
     BUNDLES_DIR.mkdir(parents=True, exist_ok=True)
     os.chmod(BUNDLES_DIR, 0o700)
     pw = passphrase()
     hub_pub = sh("wg pubkey", input_text=unseal_file(
         WG_DIR / "wg0.key.sealed", pw)).strip()
 
+    # Persona -> identidades suyas. Las de una sola, con su peer.
+    identidades = {}
+    for persona, peers in PERSONAS_DUALES.items():
+        identidades[persona] = peers
     for name, family, ip, kind, desc in PEERS:
         if kind == "servicio":
             continue
-        if only and name != only:
+        if any(name in v for v in PERSONAS_DUALES.values()):
             continue
-        d = peer_dir(name)
-        certs = CA_DIR / "certs" / name
-        priv = unseal_file(d / "privatekey.sealed", pw)
-        psk = unseal_file(d / "psk.sealed", pw)
+        identidades[name] = [name]
 
-        # Cada familia alcanza a los servicios y a si misma. La familia
-        # admin llega a todos. Los developers NO llegan a la familia admin:
-        # esa es la separacion que se quiere.
-        if family == "admin":
-            allowed = [FAMILIES["servicios"], FAMILIES["devs"], FAMILIES["admin"]]
-        else:
-            allowed = [FAMILIES["servicios"], FAMILIES["devs"]]
-
-        conf = (
-            "# Configuracion de WireGuard para DolyNation (peer: {name}).\n"
-            "# Generada por doly-vpn.py. Privada: no la compartas.\n"
-            "\n"
-            "[Interface]\n"
-            "PrivateKey = {priv}\n"
-            "Address = {ip}/32\n"
-            "MTU = {mtu}\n"
-            "\n"
-            "[Peer]\n"
-            "PublicKey = {hubpub}\n"
-            "PresharedKey = {psk}\n"
-            "AllowedIPs = {allowed}\n"
-            "Endpoint = {endpoint}:{port}\n"
-            "PersistentKeepalive = 25\n"
-        ).format(
-            name=name, priv=priv, ip=ip, mtu=WG_MTU, hubpub=hub_pub,
-            psk=psk, allowed=", ".join(allowed),
-            endpoint=WG_ENDPOINT, port=WG_PORT,
-        )
-
-        # El .p12 lleva la llave TLS (la del certificado de cliente), no la
-        # de WireGuard.
-        tls_priv = unseal_file(d / "tls-privatekey.sealed", pw)
-        tmp_priv = pathlib.Path("/dev/shm/doly-bundle.key")
-        try:
-            write_secret(tmp_priv, tls_priv)
-            # -passout env: y no pass: la passphrase lleva caracteres que
-            # el shell interpretaria como separadores de comandos.
-            # El .p12 lleva el cert con su cadena: el navegador la envia
-            # al servidor, que la necesita para validar al firmante.
-            p12 = sh_bytes(
-                f"openssl pkcs12 -export -inkey {tmp_priv} -in {certs / 'chain.pem'} "
-                f"-certfile {CA_DIR / 'intermediate-ca.crt'} -name {name} "
-                f"-passout env:CA_PW",
-                env={"CA_PW": pw},
-            )
-        finally:
-            tmp_priv.unlink(missing_ok=True)
+    for persona, peers in identidades.items():
+        if only and persona != only:
+            continue
 
         work = pathlib.Path("/dev/shm/doly-bundle")
         shutil.rmtree(work, ignore_errors=True)
-        (work / name).mkdir(parents=True)
-        write_secret(work / name / "wg0.conf", conf)
-        (work / name / f"{name}.p12").write_bytes(p12)
-        os.chmod(work / name / f"{name}.p12", 0o600)
-        shutil.copy(certs / "chain.pem", work / name / "client-cert.pem")
+        (work / persona).mkdir(parents=True)
+
+        # El certificado de cliente: uno por identidad, con el CN de esa
+        # identidad. Asi el log del servidor dice que identidad se uso.
+        for peer in peers:
+            d = peer_dir(peer)
+            certs = CA_DIR / "certs" / peer
+            familia = next(p[1] for p in PEERS if p[0] == peer)
+            ip = next(p[2] for p in PEERS if p[0] == peer)
+            priv = unseal_file(d / "privatekey.sealed", pw)
+            psk = unseal_file(d / "psk.sealed", pw)
+
+            # Cada familia alcanza a los servicios y a si misma. La
+            # familia admin llega a todos. Los developers NO llegan a la
+            # familia admin: esa es la separacion que se quiere.
+            if familia == "admin":
+                allowed = [FAMILIES["servicios"], FAMILIES["devs"],
+                           FAMILIES["admin"]]
+            else:
+                allowed = [FAMILIES["servicios"], FAMILIES["devs"]]
+
+            sufijo = peer.split("-", 1)[1] if "-" in peer else ""
+            nombre_conf = f"wg-{sufijo}.conf" if sufijo in ("dev", "admin") \
+                else "wg0.conf"
+
+            conf = (
+                "# Configuracion de WireGuard para DolyNation "
+                "(identidad: {peer}).\n"
+                "# Generada por doly-vpn.py. Privada: no la compartas.\n"
+                "\n"
+                "[Interface]\n"
+                "PrivateKey = {priv}\n"
+                "Address = {ip}/32\n"
+                "MTU = {mtu}\n"
+                "\n"
+                "[Peer]\n"
+                "PublicKey = {hubpub}\n"
+                "PresharedKey = {psk}\n"
+                "AllowedIPs = {allowed}\n"
+                "Endpoint = {endpoint}:{port}\n"
+                "PersistentKeepalive = 25\n"
+            ).format(
+                peer=peer, priv=priv, ip=ip, mtu=WG_MTU, hubpub=hub_pub,
+                psk=psk, allowed=", ".join(allowed),
+                endpoint=WG_ENDPOINT, port=WG_PORT,
+            )
+            write_secret(work / persona / nombre_conf, conf)
+
+            # El .p12 lleva la llave TLS (la del certificado de cliente),
+            # no la de WireGuard.
+            tls_priv = unseal_file(d / "tls-privatekey.sealed", pw)
+            tmp_priv = pathlib.Path("/dev/shm/doly-bundle.key")
+            try:
+                write_secret(tmp_priv, tls_priv)
+                # -passout env: y no pass: la passphrase lleva caracteres
+                # que el shell interpretaria como separadores de comandos.
+                # El .p12 lleva el cert con su cadena: el navegador la
+                # envia al servidor, que la necesita para validar al
+                # firmante.
+                p12 = sh_bytes(
+                    f"openssl pkcs12 -export -inkey {tmp_priv} "
+                    f"-in {certs / 'chain.pem'} "
+                    f"-certfile {CA_DIR / 'intermediate-ca.crt'} -name {peer} "
+                    f"-passout env:CA_PW",
+                    env={"CA_PW": pw},
+                )
+            finally:
+                tmp_priv.unlink(missing_ok=True)
+
+            (work / persona / f"{peer}.p12").write_bytes(p12)
+            os.chmod(work / persona / f"{peer}.p12", 0o600)
+            shutil.copy(certs / "chain.pem",
+                        work / persona / f"client-cert-{peer}.pem")
+
         # Un solo fichero con las dos CAs: el navegador valida al
         # servidor contra el bundle y el servidor valida al cliente
         # contra el mismo bundle.
         bundle = (read_secret(CA_DIR / "intermediate-ca.crt") + "\n"
                   + read_secret(CA_DIR / "root-ca.crt") + "\n")
-        write_secret(work / name / "ca.crt", bundle, 0o644)
-        shutil.copy(CA_DIR / "root-ca.crt", work / name / "root-ca.crt")
-        write_secret(work / name / "LEEME.txt", BUNDLE_README.format(
-            name=name, family=family, ip=ip,
-            dns=", ".join(sorted(set(SERVICE_NAMES.values()))),
-        ), 0o644)
+        write_secret(work / persona / "ca.crt", bundle, 0o644)
+        shutil.copy(CA_DIR / "root-ca.crt", work / persona / "root-ca.crt")
+        write_secret(work / persona / "LEEME.txt",
+                     BUNDLE_README.format(
+                         name=persona,
+                         identidades=", ".join(peers),
+                         dns=", ".join(sorted(set(SERVICE_NAMES.values()))),
+                     ), 0o644)
 
         # El tar tambien es binario: se lee como bytes.
-        tar = sh_bytes(f"tar -C {work} -czf - {name}")
+        tar = sh_bytes(f"tar -C {work} -czf - {persona}")
         enc = seal(tar, pw)
-        out = BUNDLES_DIR / f"{name}.tar.gz.sealed"
+        out = BUNDLES_DIR / f"{persona}.tar.gz.sealed"
         seal_blob_file(out, enc, pw)
-        print(f"  bundle de {name}: {out} ({len(enc)} bytes sellados)")
+        print(f"  bundle de {persona}: {out} ({len(enc)} bytes sellados)")
 
     shutil.rmtree("/dev/shm/doly-bundle", ignore_errors=True)
 
