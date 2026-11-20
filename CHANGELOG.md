@@ -11,6 +11,13 @@ un PR de release contra `develop` que sube la versión y escribe esta sección; 
 mergearlo se crean el tag anotado y la GitHub Release. Ver
 [`conventions/versioning.md`](https://github.com/DolyLanguagesORG/dolynation-ehecatl-docs/blob/develop/conventions/versioning.md).
 
+## [0.9.0](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.8.0...v0.9.0) (2026-11-20)
+
+
+### Features
+
+* **billing:** agrega tablas, variables y webhook stripe en nginx ([#197](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/197)) ([1dd1195](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/1dd119522ec992aefc0996e99fde6658baf4f1ee))
+
 ## [0.8.0](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.7.0...v0.8.0) (2026-11-20)
 
 
