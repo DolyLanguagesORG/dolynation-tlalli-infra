@@ -17,7 +17,7 @@
 # Uso: vpn-sshd.sh apply | show | verify
 set -euo pipefail
 
-NEW_PORT=50022
+NEW_PORT=59253
 OLD_PORT=22
 CONF="/etc/ssh/sshd_config.d/60-doly-vpn.conf"
 
