@@ -33,8 +33,12 @@
 #   vpn-firewall.sh backup    guarda una copia de las reglas actuales
 set -euo pipefail
 
-WG_PORT=50443
-SSH_PORT=50022
+# Los puertos son altos y no son los que se adivinan (50443 es el de
+# WireGuard y 50022 el de la mayoria de los servidores de SSH). Esto NO es
+# seguridad: la seguridad la dan la llave con PSK, el mTLS y el firewall.
+# Es solo para que un escaner de puertos no sepa donde golpear.
+WG_PORT=58376
+SSH_PORT=59253
 OLD_SSH_PORT=22
 
 # Bridge de Docker de la red de peers de la VPN.

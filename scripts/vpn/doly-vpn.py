@@ -51,7 +51,7 @@ FAMILIES = {
 }
 
 HUB_IP = "10.90.0.1"
-WG_PORT = 50443
+WG_PORT = 58376
 WG_MTU = 1420
 # Endpoint publico del hub: lo usan los developers (sus laptops).
 WG_ENDPOINT = "141.148.148.45"
