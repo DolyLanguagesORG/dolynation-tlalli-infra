@@ -47,7 +47,10 @@ FAM_ADMIN="10.92.0.0/24"
 # Conjuntos de IPs que se actualizan solos.
 SET_CF="cf_ranges"       # rangos de Cloudflare (el proxy publico)
 SET_GH="gh_actions"      # runners de GitHub Actions (el bot de deploy)
-CF_URL="https://www.cloudflare.com/ips-v4.txt"
+# Cloudflare cambio la URL: `/ips-v4.txt` devuelve 404 desde hace
+# meses y la lista se quedaba VACIA, con lo que la regla que
+# acepta al proxy dejaba de filtrar nada.
+CF_URL="https://www.cloudflare.com/ips-v4/"
 GH_URL="https://api.github.com/meta"
 STATE_DIR="/etc/doly-vpn/state"
 
@@ -64,7 +67,10 @@ ip4_list() {
 fetch_list() {
   # $1 = url, $2 = fichero destino, $3 = comando que extrae las IPs
   local url="$1" dest="$2" extract="$3"
-  if ! curl -sf --max-time 30 "$url" | eval "$extract" > "$dest.tmp" 2>/dev/null; then
+  # `-4`: el servidor resuelve algunos dominios a IPv6 y no tiene salida
+  # IPv6, asi que la conexion se queda colgada. `-L`: algunas listas
+  # redirigen.
+  if ! curl -4 -sfL --max-time 30 "$url" | eval "$extract" > "$dest.tmp" 2>/dev/null; then
     echo "AVISO: no se pudo actualizar $dest; se conserva la lista anterior" >&2
     rm -f "$dest.tmp"
     return 0
@@ -81,6 +87,14 @@ fetch_list() {
 load_set() {
   # $1 = nombre del set, $2 = fichero con las IPs
   local set="$1" file="$2"
+  # Un fichero VACIO no puede dejar el set vacio. Con la lista de Cloudflare
+  # vacia, la regla que acepta al proxy deja de filtrar nada (o, si
+  # estuviera en modo fail-closed, cortaria el trafico legitimo).
+  # Con la lista vacia se conserva la anterior.
+  if [ ! -s "$file" ]; then
+    echo "AVISO: $file esta vacio; se conserva el contenido anterior de $set" >&2
+    return 0
+  fi
   ipset destroy "$set" 2>/dev/null || true
   ipset create "$set" hash:net family inet maxelem 65536 -exist
   local cidr
@@ -127,6 +141,17 @@ apply() {
   ipt -A DOLY-IN -p tcp --dport "$SSH_PORT" -m set --match-set "$SET_GH" src -j ACCEPT
   ipt -A DOLY-IN -p tcp --dport "$SSH_PORT" -s "$FAM_ADMIN" -j ACCEPT
 
+  # DNS de la VPN: el hub resuelve los nombres de los servicios a sus IP de
+  # tunel (10.90.0.x). Solo desde el tunel: nadie de internet llega al 53.
+  # Sin esta regla el `DOLY-IN` rechaza el 53 con icmp-host-prohibited y el
+  # equipo no resuelve nada.
+  ipt -A DOLY-IN -p udp --dport 53 -s "$FAM_SERVICIOS" -j ACCEPT
+  ipt -A DOLY-IN -p udp --dport 53 -s "$FAM_DEVS" -j ACCEPT
+  ipt -A DOLY-IN -p udp --dport 53 -s "$FAM_ADMIN" -j ACCEPT
+  ipt -A DOLY-IN -p tcp --dport 53 -s "$FAM_SERVICIOS" -j ACCEPT
+  ipt -A DOLY-IN -p tcp --dport 53 -s "$FAM_DEVS" -j ACCEPT
+  ipt -A DOLY-IN -p tcp --dport 53 -s "$FAM_ADMIN" -j ACCEPT
+
   # El puerto viejo: mientras la migracion no este cerrada, sigue abierto
   # para no cortar el deploy. Se cierra con `vpn-firewall.sh cerrar-22`.
   if [ "${CLOSE_OLD_SSH:-0}" = "1" ]; then
@@ -143,6 +168,20 @@ apply() {
   # desde internet, solo a traves del proxy.
   ipt -A DOLY-IN -p tcp --dport 443 -m set --match-set "$SET_CF" src -j ACCEPT
   ipt -A DOLY-IN -p tcp --dport 80 -m set --match-set "$SET_CF" src -j ACCEPT
+
+  # Lo que NO viene de Cloudflare no entra. Sin esta regla, la IP del origen
+  # es publica y cualquiera puede saltarse el proxy: sin WAF, sin las reglas
+  # de Cloudflare y sin que Cloudflare vea la peticiones.
+  #
+  # Fail-safe: si la lista de Cloudflare esta vacia NO se corta (dejarla
+  # vacia significa que el fetch fallo; cortar ahi tumbaria el sitio).
+  # En ese caso se avisa, loudly, para que se investigue.
+  if ipset list "$SET_CF" 2>/dev/null | grep -q "Number of entries: [1-9]"; then
+    ipt -A DOLY-IN -p tcp --dport 443 -j REJECT
+    ipt -A DOLY-IN -p tcp --dport 80 -j REJECT
+  else
+    echo "AVISO: la lista de Cloudflare esta vacia: el 80/443 NO se cierra" >&2
+  fi
 
   # Lo demas sigue su curso (las reglas de Oracle, que cierran el resto).
   ipt -A DOLY-IN -j RETURN
@@ -192,6 +231,7 @@ apply() {
   echo "reglas aplicadas"
   echo "  WireGuard: udp/$WG_PORT"
   echo "  SSH: tcp/$SSH_PORT (Actions + familia admin)"
+  echo "  DNS de la VPN: udp/tcp 53 (solo desde el tunel)"
   echo "  Cloudflare: $(wc -l < "$STATE_DIR/cf-ips.txt" 2>/dev/null || echo 0) rangos"
   echo "  GitHub Actions: $(wc -l < "$STATE_DIR/gh-actions-ips.txt" 2>/dev/null || echo 0) rangos"
 }
@@ -223,6 +263,8 @@ verify() {
   check iptables -C FORWARD -j DOLY-FWD
   echo "== reglas clave =="
   check iptables -C DOLY-IN -p udp --dport "$WG_PORT" -j ACCEPT
+  check iptables -C DOLY-IN -p udp --dport 53 -s "$FAM_DEVS" -j ACCEPT
+  check iptables -C DOLY-IN -p udp --dport 53 -s "$FAM_ADMIN" -j ACCEPT
   check iptables -C DOLY-FWD -s "$FAM_DEVS" -d "$FAM_ADMIN" -j DROP
   check iptables -C DOLY-FWD -s "$FAM_SERVICIOS" -d "$FAM_ADMIN" -j DROP
   echo "== sets =="

@@ -532,6 +532,23 @@ Como usarlo
   sudo wg-quick up wg-admin    # identidad de administracion
   sudo wg-quick down wg-dev    # bajar una identidad
 
+El DNS
+------
+El config lleva `DNS = 10.90.0.1`: el hub de la VPN. Alli los nombres de
+los servicios resuelven a su IP DE TUNEL, no a la IP publica de Cloudflare.
+
+  devapi.yacaterkos.tech  ->  10.90.0.2
+  devweb.yacaterkos.tech  ->  10.90.0.3
+  minios.doly.internal    ->  10.90.0.4
+
+Sin esa linea, el navegador resolveria el nombre por tu conexion normal
+de internet y la peticion saldria del servidor SIN pasar por el tunel: la
+VPN no filtraria nada. Con `wg-quick` el DNS se aplica solo; en la app
+mobil hay que marcar "Override DNS" si aparece la opcion.
+
+Comprobacion: dentro de la VPN, el nombre debe resolver a una IP que
+empiece por 10.90.
+
 Que son las identidades
 -----------------------
 Si tienes mas de un fichero de configuracion, son identidades distintas
@@ -624,10 +641,17 @@ def bundles_build(only=None):
                 "# Configuracion de WireGuard para DolyNation "
                 "(identidad: {peer}).\n"
                 "# Generada por doly-vpn.py. Privada: no la compartas.\n"
+                "#\n"
+                "# El DNS apunta al hub (10.90.0.1): alli los nombres de los\n"
+                "# servicios resuelven a su IP DE TUNEL, no a la IP publica de\n"
+                "# Cloudflare. Sin esta linea, el navegador resolveria el\n"
+                "# nombre por internet y la peticion saldria sin pasar por el\n"
+                "# tunel: la VPN no filtraria nada.\n"
                 "\n"
                 "[Interface]\n"
                 "PrivateKey = {priv}\n"
                 "Address = {ip}/32\n"
+                "DNS = {dns}\n"
                 "MTU = {mtu}\n"
                 "\n"
                 "[Peer]\n"
@@ -637,7 +661,7 @@ def bundles_build(only=None):
                 "Endpoint = {endpoint}:{port}\n"
                 "PersistentKeepalive = 25\n"
             ).format(
-                peer=peer, priv=priv, ip=ip, mtu=WG_MTU, hubpub=hub_pub,
+                peer=peer, priv=priv, ip=ip, dns=HUB_IP, mtu=WG_MTU, hubpub=hub_pub,
                 psk=psk, allowed=", ".join(allowed),
                 endpoint=WG_ENDPOINT, port=WG_PORT,
             )
