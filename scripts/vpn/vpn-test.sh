@@ -180,13 +180,57 @@ test_identidades() {
   fi
 }
 
+test_dns() {
+  titulo "DNS de la VPN"
+  # El hub resuelve los nombres de los servicios a sus IPs de tunel. Sin
+  # esto, el equipo resolveria el nombre a la IP publica de Cloudflare y
+  # la peticion saldria del servidor SIN pasar por el tunel: la VPN no
+  # filtraria nada.
+  local hub="10.90.0.1"
+
+  if ! systemctl is-active --quiet doly-dns.service; then
+    ko "el resolutor DNS de la VPN (doly-dns) no esta activo"
+    return
+  fi
+  ok "el resolutor DNS de la VPN esta activo"
+
+  if ss -ulnp 2>/dev/null | grep -q "$hub:53"; then
+    ok "el resolutor escucha en $hub:53"
+  else
+    ko "el resolutor no escucha en $hub:53"
+  fi
+
+  local par
+  for par in "devapi.yacaterkos.tech 10.90.0.2" \
+             "devweb.yacaterkos.tech 10.90.0.3" \
+             "minios.doly.internal 10.90.0.4"; do
+    set -- $par
+    local nombre="$1" esperado="$2"
+    local obtenido
+    obtenido="$(dig +short +time=3 +tries=1 "@$hub" "$nombre" 2>/dev/null | head -1)"
+    if [ "$obtenido" = "$esperado" ]; then
+      ok "$nombre resuelve a $esperado"
+    else
+      ko "$nombre resuelve a '${obtenido:-nada}' (se esperaba $esperado)"
+    fi
+  done
+
+  # Y que el firewall deje pasar el 53 desde el tunel y solo desde ahi.
+  if iptables -C DOLY-IN -p udp --dport 53 -s "$FAM_DEVS" -j ACCEPT 2>/dev/null; then
+    ok "el firewall deja pasar el DNS desde la familia devs"
+  else
+    ko "el firewall no deja pasar el DNS desde la familia devs"
+  fi
+}
+
 case "${1:-todo}" in
   tunnel) test_tunnel ;;
   identidades) test_identidades ;;
+  dns) test_dns ;;
   mtls) test_mtls ;;
   familias) test_familias ;;
-  todo) test_tunnel; test_mtls; test_familias; test_identidades ;;
-  *) echo "uso: $0 {tunnel|mtls|familias|identidades|todo}" >&2; exit 1 ;;
+  todo) test_tunnel; test_mtls; test_familias; test_identidades; test_dns ;;
+  *) echo "uso: $0 {tunnel|mtls|familias|identidades|dns|todo}" >&2; exit 1 ;;
 esac
 
 echo
