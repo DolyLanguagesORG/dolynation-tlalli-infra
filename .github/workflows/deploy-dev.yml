@@ -109,62 +109,11 @@ jobs:
           fi
           cat /tmp/host_keys >> ~/.ssh/known_hosts
 
-      - name: Escribir los .env en el servidor
+      - name: Escribir .env de la base de datos en el servidor
         env:
           POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-          NODE_ENV: ${{ vars.NODE_ENV }}
-          PORT: ${{ vars.PORT }}
-          HOST: ${{ vars.HOST }}
-          API_PREFIX: ${{ vars.API_PREFIX }}
-          APP_NAME: ${{ vars.APP_NAME }}
-          LOG_LEVEL: ${{ vars.LOG_LEVEL }}
-          DB_HOST: ${{ vars.DB_HOST }}
-          DB_PORT: ${{ vars.DB_PORT }}
-          DB_LOGGING: ${{ vars.DB_LOGGING }}
-          JWT_ACCESS_TTL: ${{ vars.JWT_ACCESS_TTL }}
-          JWT_REFRESH_TTL: ${{ vars.JWT_REFRESH_TTL }}
-          AI_DEFAULT_PROVIDER: ${{ vars.AI_DEFAULT_PROVIDER }}
-          MINIMAX_MODEL: ${{ vars.MINIMAX_MODEL }}
-          MINIMAX_REASONING_EFFORT: ${{ vars.MINIMAX_REASONING_EFFORT }}
-          GOOGLE_MODEL: ${{ vars.GOOGLE_MODEL }}
-          OPENAI_MODERATION_ENDPOINT: ${{ vars.OPENAI_MODERATION_ENDPOINT }}
-          OPENAI_MODERATION_MODEL: ${{ vars.OPENAI_MODERATION_MODEL }}
-          CATEGORY_MODERATION_ENABLED: ${{ vars.CATEGORY_MODERATION_ENABLED }}
-          CATEGORY_MODERATION_AI_ENABLED: ${{ vars.CATEGORY_MODERATION_AI_ENABLED }}
-          CATEGORY_MODERATION_AI_PROVIDER: ${{ vars.CATEGORY_MODERATION_AI_PROVIDER }}
-          CATEGORY_DAILY_LIMIT: ${{ vars.CATEGORY_DAILY_LIMIT }}
-          CATEGORY_MODERATION_SCORE_THRESHOLD: ${{ vars.CATEGORY_MODERATION_SCORE_THRESHOLD }}
-          CATEGORY_MODERATION_TIMEOUT_MS: ${{ vars.CATEGORY_MODERATION_TIMEOUT_MS }}
-          CATEGORY_MODERATION_CACHE_TTL_MS: ${{ vars.CATEGORY_MODERATION_CACHE_TTL_MS }}
-          SMTP_HOST: ${{ vars.SMTP_HOST }}
-          SMTP_PORT: ${{ vars.SMTP_PORT }}
-          SMTP_FROM: ${{ vars.SMTP_FROM }}
-          SMTP_FROM_NAME: ${{ vars.SMTP_FROM_NAME }}
-          SMTP_SECURE: ${{ vars.SMTP_SECURE }}
-          FRONTEND_BASE_URL: ${{ vars.FRONTEND_BASE_URL }}
-          EMAIL_VERIFICATION_REQUIRED: ${{ vars.EMAIL_VERIFICATION_REQUIRED }}
-          BILLING_PROVIDER: ${{ vars.BILLING_PROVIDER }}
-          BILLING_ENV_TAG: ${{ vars.BILLING_ENV_TAG }}
-          STRIPE_PUBLISHABLE_KEY: ${{ vars.STRIPE_PUBLISHABLE_KEY }}
-          STRIPE_CURRENCY: ${{ vars.STRIPE_CURRENCY }}
-          STRIPE_CHECKOUT_UI_MODE: ${{ vars.STRIPE_CHECKOUT_UI_MODE }}
-          STRIPE_PRICE_DOLLY: ${{ vars.STRIPE_PRICE_DOLLY }}
-          STRIPE_PRICE_DOLLY_PLUS: ${{ vars.STRIPE_PRICE_DOLLY_PLUS }}
-          STRIPE_PRICE_DOLLY_PRO: ${{ vars.STRIPE_PRICE_DOLLY_PRO }}
-          STRIPE_PRICE_LANGUAGE_UNLOCK: ${{ vars.STRIPE_PRICE_LANGUAGE_UNLOCK }}
-          DB_USER: ${{ secrets.POSTGRES_USER }}
-          DB_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          DB_DATABASE: ${{ secrets.POSTGRES_DB }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
         run: |
           set -euo pipefail
           # El agente SSH se creo en el paso anterior, en otro shell: hay que
@@ -175,79 +124,13 @@ jobs:
             export SSH_ASKPASS_REQUIRE=force
             export DISPLAY=:0
           fi
-
-          # 1. El .env de la INFRAESTRUCTURA: lo usa `docker compose` para
-          #    crear la base (POSTGRES_*).
-          INFRA_CONTENT="$(printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\n' \
+          CONTENT="$(printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\n' \
             "$POSTGRES_USER" "$POSTGRES_PASSWORD" "$POSTGRES_DB" | base64 -w0)"
-          echo "$INFRA_CONTENT" | ssh -i ~/.ssh/deploy_key \
+          echo "$CONTENT" | ssh -i ~/.ssh/deploy_key \
             -p "${{ secrets.DEPLOY_PORT }}" \
             -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             "umask 077 && base64 -d > '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/.env'"
-
-          # 2. El .env del BACKEND: es el que lee la aplicacion (ConfigModule
-          #    lo busca en su directorio de trabajo, que en el contenedor es
-          #    /app, montado desde el repo del backend). Antes este archivo
-          #    se escribia a mano en el servidor y el pipeline no lo
-          #    tocaba: ningun secreto se podia rotar por el deploy.
-          BACKEND_CONTENT="$(printf 'NODE_ENV=%s\nPORT=%s\nHOST=%s\nAPI_PREFIX=%s\nAPP_NAME=%s\nLOG_LEVEL=%s\nDB_HOST=%s\nDB_PORT=%s\nDB_LOGGING=%s\nJWT_ACCESS_TTL=%s\nJWT_REFRESH_TTL=%s\nAI_DEFAULT_PROVIDER=%s\nMINIMAX_MODEL=%s\nMINIMAX_REASONING_EFFORT=%s\nGOOGLE_MODEL=%s\nOPENAI_MODERATION_ENDPOINT=%s\nOPENAI_MODERATION_MODEL=%s\nCATEGORY_MODERATION_ENABLED=%s\nCATEGORY_MODERATION_AI_ENABLED=%s\nCATEGORY_MODERATION_AI_PROVIDER=%s\nCATEGORY_DAILY_LIMIT=%s\nCATEGORY_MODERATION_SCORE_THRESHOLD=%s\nCATEGORY_MODERATION_TIMEOUT_MS=%s\nCATEGORY_MODERATION_CACHE_TTL_MS=%s\nSMTP_HOST=%s\nSMTP_PORT=%s\nSMTP_FROM=%s\nSMTP_FROM_NAME=%s\nSMTP_SECURE=%s\nFRONTEND_BASE_URL=%s\nEMAIL_VERIFICATION_REQUIRED=%s\nBILLING_PROVIDER=%s\nBILLING_ENV_TAG=%s\nSTRIPE_PUBLISHABLE_KEY=%s\nSTRIPE_CURRENCY=%s\nSTRIPE_CHECKOUT_UI_MODE=%s\nSTRIPE_PRICE_DOLLY=%s\nSTRIPE_PRICE_DOLLY_PLUS=%s\nSTRIPE_PRICE_DOLLY_PRO=%s\nSTRIPE_PRICE_LANGUAGE_UNLOCK=%s\nDB_USER=%s\nDB_PASSWORD=%s\nDB_DATABASE=%s\nJWT_SECRET=%s\nMINIMAX_API_KEY=%s\nGOOGLE_API_KEY=%s\nOPENAI_API_KEY=%s\nSMTP_USER=%s\nSMTP_PASSWORD=%s\nSTRIPE_SECRET_KEY=%s\nSTRIPE_WEBHOOK_SECRET=%s\n' \
-            "$NODE_ENV" \
-            "$PORT" \
-            "$HOST" \
-            "$API_PREFIX" \
-            "$APP_NAME" \
-            "$LOG_LEVEL" \
-            "$DB_HOST" \
-            "$DB_PORT" \
-            "$DB_LOGGING" \
-            "$JWT_ACCESS_TTL" \
-            "$JWT_REFRESH_TTL" \
-            "$AI_DEFAULT_PROVIDER" \
-            "$MINIMAX_MODEL" \
-            "$MINIMAX_REASONING_EFFORT" \
-            "$GOOGLE_MODEL" \
-            "$OPENAI_MODERATION_ENDPOINT" \
-            "$OPENAI_MODERATION_MODEL" \
-            "$CATEGORY_MODERATION_ENABLED" \
-            "$CATEGORY_MODERATION_AI_ENABLED" \
-            "$CATEGORY_MODERATION_AI_PROVIDER" \
-            "$CATEGORY_DAILY_LIMIT" \
-            "$CATEGORY_MODERATION_SCORE_THRESHOLD" \
-            "$CATEGORY_MODERATION_TIMEOUT_MS" \
-            "$CATEGORY_MODERATION_CACHE_TTL_MS" \
-            "$SMTP_HOST" \
-            "$SMTP_PORT" \
-            "$SMTP_FROM" \
-            "$SMTP_FROM_NAME" \
-            "$SMTP_SECURE" \
-            "$FRONTEND_BASE_URL" \
-            "$EMAIL_VERIFICATION_REQUIRED" \
-            "$BILLING_PROVIDER" \
-            "$BILLING_ENV_TAG" \
-            "$STRIPE_PUBLISHABLE_KEY" \
-            "$STRIPE_CURRENCY" \
-            "$STRIPE_CHECKOUT_UI_MODE" \
-            "$STRIPE_PRICE_DOLLY" \
-            "$STRIPE_PRICE_DOLLY_PLUS" \
-            "$STRIPE_PRICE_DOLLY_PRO" \
-            "$STRIPE_PRICE_LANGUAGE_UNLOCK" \
-            "$DB_USER" \
-            "$DB_PASSWORD" \
-            "$DB_DATABASE" \
-            "$JWT_SECRET" \
-            "$MINIMAX_API_KEY" \
-            "$GOOGLE_API_KEY" \
-            "$OPENAI_API_KEY" \
-            "$SMTP_USER" \
-            "$SMTP_PASSWORD" \
-            "$STRIPE_SECRET_KEY" \
-            "$STRIPE_WEBHOOK_SECRET" | base64 -w0)"
-          echo "$BACKEND_CONTENT" | ssh -i ~/.ssh/deploy_key \
-            -p "${{ secrets.DEPLOY_PORT }}" \
-            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
-            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "umask 077 && base64 -d > '${{ secrets.ORG_PATH }}/dolynation-atl-back/.env'"
 
       # El orden importa: primero se aplica el schema (que puede recrear la
       # base) y despues se levanta el stack. Al revés, el backend arrancaria
