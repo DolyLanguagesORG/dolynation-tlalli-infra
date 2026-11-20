@@ -515,6 +515,17 @@ Acceso a los ambientes de desarrollo de DolyNation por una red privada
 Que necesitas
 -------------
 1. Instalar WireGuard (https://www.wireguard.com/install/).
+
+   En Linux hace falta tambien el resolvedor de DNS, porque el config
+   lleva `DNS = 10.90.0.1` y `wg-quick` lo aplica al arrancar. Sin el,
+   `wg-quick up` falla y la interfaz no sube:
+
+     Arch            sudo pacman -S systemd-resolvconf
+     Debian / Ubuntu sudo apt install openresolv
+     Fedora          sudo dnf install openresolv
+
+   Si el error es `resolvconf: signature mismatch`: `sudo resolvconf -u`.
+
 2. Copiar los ficheros de configuracion a /etc/wireguard/  (Linux)
    o importarlos desde la app de WireGuard               (Windows/macOS).
 3. Instalar la CA publica en el sistema para que el navegador confie:
@@ -531,6 +542,10 @@ Como usarlo
   sudo wg-quick up wg-dev      # identidad de desarrollo
   sudo wg-quick up wg-admin    # identidad de administracion
   sudo wg-quick down wg-dev    # bajar una identidad
+
+Si `wg-quick up` falla con "resolvconf: command not found" o con
+"signature mismatch", falta el resolvedor de DNS (ver el paso 1). Sin el,
+la interfaz no sube.
 
 El DNS
 ------
