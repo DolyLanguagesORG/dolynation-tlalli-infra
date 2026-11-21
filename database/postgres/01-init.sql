@@ -23,7 +23,7 @@ CREATE TABLE users (
   id SERIAL PRIMARY KEY,
   full_name VARCHAR(255),
   email VARCHAR(254) NOT NULL UNIQUE,
-  password VARCHAR(255) NOT NULL,
+  password VARCHAR(255),
   role_id INTEGER NOT NULL DEFAULT 1 REFERENCES roles(id),
   subscription_tier VARCHAR(30) DEFAULT NULL,
   stripe_customer_id VARCHAR(64),
@@ -43,6 +43,25 @@ CREATE INDEX idx_users_role_id ON users(role_id);
 CREATE UNIQUE INDEX uq_users_stripe_customer_id
   ON users(stripe_customer_id)
   WHERE stripe_customer_id IS NOT NULL;
+
+-- Tabla: user_oauth_accounts
+-- Identidades externas OAuth 2.0 / OIDC vinculadas (Google, Microsoft, etc.).
+CREATE TABLE user_oauth_accounts (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider VARCHAR(30) NOT NULL,
+  provider_user_id VARCHAR(255) NOT NULL,
+  provider_email VARCHAR(254),
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX uq_user_oauth_accounts_provider_sub
+  ON user_oauth_accounts(provider, provider_user_id);
+CREATE UNIQUE INDEX uq_user_oauth_accounts_user_provider
+  ON user_oauth_accounts(user_id, provider);
+CREATE INDEX idx_user_oauth_accounts_user_id
+  ON user_oauth_accounts(user_id);
 
 -- Tabla: user_settings
 -- Preferencias de estudio por usuario (idiomas ordenados por prioridad,
