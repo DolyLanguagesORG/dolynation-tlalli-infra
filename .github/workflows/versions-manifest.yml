@@ -105,6 +105,23 @@ jobs:
                       f"app_version es '{actual}' y deberia ser '{esperada}' "
                       f"(la mas alta entre backend y frontend)")
 
+          # `site_version` es la version de la landing: una linea de release
+          # aparte, que NO manda en la `app_version` (son dos productos en dos
+          # dominios). Tiene que coincidir con la fila de la landing.
+          site_repos = ('dolynation-tetl-landing',)
+          for repo in site_repos:
+              if repo not in versiones:
+                  continue
+              m = re.search(r'^site_version: *(\S+)\s*$', texto, re.MULTILINE)
+              actual = m.group(1).strip() if m else ''
+              if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', actual):
+                  errores.append(
+                      f"site_version ('{actual}') no es valida: se espera X.Y.Z")
+              elif actual != versiones[repo]:
+                  avisos.append(
+                      f"site_version es '{actual}' y la fila de {repo} dice "
+                      f"'{versiones[repo]}'")
+
           for a in avisos:
               print('::warning::' + a)
 

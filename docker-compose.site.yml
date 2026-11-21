@@ -1,0 +1,54 @@
+# Stack de la LANDING de DolyNation.
+#
+# La landing es un SITIO ESTATICO (Astro). Va en su propio compose, aparte
+# del de la aplicacion, por una razon: son dos productos con dos dominios y
+# dos ciclos de release.
+#
+# Que aporta este compose aparte:
+#
+#   - Desplegar la landing NO reinicia ni el backend ni el frontend.
+#   - Un problema en la landing no tumba la aplicacion (y al reves).
+#   - El rollback es independiente: cada uno cambia su propio SHA.
+#   - El `app_version` de la aplicacion no se mueve cuando sale una release
+#     de la landing.
+#
+# El puerto se parametriza para que el mismo archivo sirva a cada ambiente:
+#
+#   COMPOSE_PROJECT_NAME=doly-site-staging   ->  57023
+#   COMPOSE_PROJECT_NAME=doly-site-rehearsal ->  57043
+#   COMPOSE_PROJECT_NAME=doly-site-prod      ->  57033
+#
+# La imagen la publica el workflow build-images.yml del repo de la landing y
+# se etiqueta con el SHA exacto del commit (inmutable): el rollback es
+# cambiar el SHA.
+#
+# Ver operations/PLAN-DE-DESPLIEGUE.md.
+
+name: ${COMPOSE_PROJECT_NAME:-doly-site-staging}
+
+services:
+  landing:
+    image: ghcr.io/dolylanguagesorg/dolynation-tetl-landing:${LANDING_TAG:-latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-doly-site-staging}-landing
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-America/Mexico_City}
+    ports:
+      # Solo local: lo consume el proxy de este servidor. Publicarlo en
+      # 0.0.0.0 dejaria el sitio accesible desde internet sin TLS.
+      - "127.0.0.1:${LANDING_HOST_PORT:-57023}:80"
+    networks:
+      - site-net
+    healthcheck:
+      # 127.0.0.1 y no localhost: en Alpine `localhost` resuelve a ::1 (IPv6)
+      # y el contenedor escucha en 0.0.0.0 (IPv4).
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  site-net:
+    name: ${COMPOSE_PROJECT_NAME:-doly-site-staging}-net
+    driver: bridge

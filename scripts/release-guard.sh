@@ -17,6 +17,9 @@ set -euo pipefail
 
 BRANCH="${1:?falta el nombre de la rc}"
 ORG="${ORG:-DolyLanguagesORG}"
+# Los repos que compiten por la MISMA rc de la aplicacion. La landing NO
+# entra: tiene su propia linea de releases (`site_version`) y se promueve por
+# su cuenta, asi que su release no puede chocar con la rc de la app.
 REPOS="${REPOS:-dolynation-atl-back dolynation-tonatiuh-front dolynation-tlalli-infra dolynation-ehecatl-docs}"
 
 log() { echo "[release-guard] $*"; }
