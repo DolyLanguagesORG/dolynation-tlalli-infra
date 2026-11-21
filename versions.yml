@@ -1,6 +1,6 @@
 project: dolynation
 app_version: 0.12.0
-site_version: <re.Match object; span=(0, 19), match='    version: 0.10.0'>
+site_version: 0.1.1
 updated: '2026-11-21'
 repositories:
   dolynation-atl-back:
