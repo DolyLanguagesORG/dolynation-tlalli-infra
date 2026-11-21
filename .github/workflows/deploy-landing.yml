@@ -1,0 +1,130 @@
+name: deploy-landing
+
+# Despliega la LANDING al entorno de DESARROLLO.
+#
+# Lo dispara el repo `dolynation-tetl-landing` cuando mergea a `develop`
+# (con un `repository_dispatch`), para que la landing no tenga que duplicar
+# los secrets de despliegue: este repo ya tiene el environment `desarrollo`
+# con la llave, el host y la clave del host.
+#
+# El despliegue va por SSH al servidor y ejecuta `scripts/deploy-dev-landing.sh`
+# (que vive en este repo, no en el repo que resetea).
+#
+# Ver operations/FLUJO-DE-RELEASE.md.
+
+on:
+  repository_dispatch:
+    types: [deploy-landing]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Rama a desplegar (solo develop por ahora)'
+        required: false
+        default: develop
+        type: string
+
+permissions:
+  contents: read
+  # GitHub actualiza el estado del deployment automaticamente; sin este
+  # permiso el GITHUB_TOKEN es de solo lectura y no puede reportarlo.
+  deployments: write
+
+concurrency:
+  group: deploy-dev-landing
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Desplegar landing en desarrollo
+    runs-on: ubuntu-latest
+    environment: desarrollo
+    steps:
+      - name: Instalar llave SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KEY_PASSPHRASE: ${{ secrets.DEPLOY_SSH_KEY_PASSPHRASE }}
+          DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          # El agente SSH se creo en el paso anterior, en otro shell: hay que
+          # volver a cargarlo aqui para que `ssh` pueda usar la llave cifrada.
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+
+          if [ -z "${DEPLOY_SSH_KEY:-}" ] || [ -z "${DEPLOY_HOST:-}" ] || [ -z "${DEPLOY_PORT:-}" ]; then
+            echo "::error::Faltan secrets de despliegue (DEPLOY_SSH_KEY, DEPLOY_HOST, DEPLOY_PORT) en el environment 'desarrollo'."
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          # La llave es PEM y puede traer CRLF: se normaliza a LF.
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # La llave tiene passphrase y el runner no es interactivo, asi que
+          # ssh-add necesita un askpass que se la entregue.
+          #
+          # El agente y el askpass se dejan en ~/.ssh porque **cada paso del
+          # workflow corre en un shell nuevo**: lo que se exporta aqui no llega
+          # al paso siguiente. Los pasos que usan `ssh` vuelven a cargarlos con
+          # `. ~/.ssh/agent_env`.
+          if [ -n "${DEPLOY_SSH_KEY_PASSPHRASE:-}" ]; then
+            printf '%s\n' "$DEPLOY_SSH_KEY_PASSPHRASE" > ~/.ssh/deploy_passphrase
+            chmod 600 ~/.ssh/deploy_passphrase
+            printf '%s\n' '#!/usr/bin/env bash' 'cat ~/.ssh/deploy_passphrase' > ~/.ssh/askpass.sh
+            chmod 700 ~/.ssh/askpass.sh
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+            # ssh-agent -s imprime tambien un "echo Agent pid ..." que no es un
+            # comando valido como script: se filtran solo los export.
+            ssh-agent -s | grep '^SSH_AUTH_SOCK\|^SSH_AGENT_PID' > ~/.ssh/agent_env
+            . ~/.ssh/agent_env
+            if ! ssh-add ~/.ssh/deploy_key; then
+              echo "::error::No se pudo cargar la llave en el agente SSH. Revisa DEPLOY_SSH_KEY_PASSPHRASE."
+              exit 1
+            fi
+            echo "Llave cargada en el agente SSH."
+          fi
+
+          # La clave del host se fija por fingerprint: no se acepta la primera
+          # conexion a ciegas. Si el host cambia, hay que actualizar el secret.
+          ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" > /tmp/host_keys 2>&1 || true
+          if [ -n "${DEPLOY_HOST_KEY:-}" ]; then
+            if ! grep -qF "$DEPLOY_HOST_KEY" /tmp/host_keys; then
+              echo "::error::La clave del host no coincide con DEPLOY_HOST_KEY."
+              echo "::error::Si el host cambio de verdad, actualiza el secret antes de desplegar."
+              exit 1
+            fi
+          fi
+          if [ ! -s /tmp/host_keys ]; then
+            echo "::error::No se pudo obtener la clave del host $DEPLOY_HOST:$DEPLOY_PORT."
+            echo "::error::Detalle del escaneo:"
+            cat /tmp/host_keys
+            exit 1
+          fi
+          cat /tmp/host_keys >> ~/.ssh/known_hosts
+
+      - name: Desplegar (pull + restart + healthcheck)
+        env:
+          REF: ${{ github.event.client_payload.ref || inputs.ref || 'develop' }}
+        run: |
+          set -euo pipefail
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+          ssh -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT }}" \
+            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "BRANCH='${{ env.REF }}' bash '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/scripts/deploy-dev-landing.sh'"

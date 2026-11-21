@@ -13,7 +13,7 @@
 set -uo pipefail
 
 ORG="DolyLanguagesORG"
-REPOS=("dolynation-atl-back" "dolynation-tonatiuh-front" "dolynation-tlalli-infra" "dolynation-ehecatl-docs")
+REPOS=("dolynation-atl-back" "dolynation-tonatiuh-front" "dolynation-tetl-landing" "dolynation-tlalli-infra" "dolynation-ehecatl-docs")
 
 gh_json() { gh api "$@" 2>/dev/null; }
 

@@ -152,6 +152,23 @@ jobs:
                   flags=re.MULTILINE,
               )
 
+          # `site_version` es la version de la LANDING. La aplicacion y la
+          # landing son dos productos en dos dominios, con lineas de release
+          # independientes: un retoque visual en la landing no puede mover la
+          # version de la aplicacion (ni al reves).
+          #
+          # Cuando publica la landing, se mueve SOLO su version: la
+          # `app_version` se calcula con backend y frontend y no le afecta.
+          SITE_REPOS = ('dolynation-tetl-landing',)
+          if repo in SITE_REPOS:
+              text = re.sub(
+                  r'^site_version: .*$',
+                  f'site_version: {version}',
+                  text,
+                  count=1,
+                  flags=re.MULTILINE,
+              )
+
           # `updated` es la fecha del ultimo cambio del manifiesto. Las fechas
           # van entrecomilladas para que el actualizador YAML de release-please
           # no las convierta en marcas de tiempo ISO.

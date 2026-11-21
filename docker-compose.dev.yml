@@ -75,6 +75,26 @@ services:
     networks:
       - doly-dev-net
 
+  landing:
+    # La landing (sitio estatico de Astro) vive en su propio servicio y en
+    # su propio puerto: no comparte nada con la aplicacion. Se despliega por
+    # separado (el flujo multirepo publica cada repo por su cuenta), asi que
+    # tocar la landing NO reinicia ni el backend ni el frontend.
+    #
+    # En desarrollo corre en modo watch (igual que los otros dos): el codigo
+    # se monta desde el clon hermano y Astro recompila al guardar.
+    image: node:22-bookworm
+    container_name: doly-dev-landing
+    working_dir: /app
+    command: sh -lc '[ -d node_modules ] || npm ci --no-audit --no-fund; exec npm run dev -- --host 0.0.0.0'
+    volumes:
+      - ../dolynation-tetl-landing:/app
+    ports:
+      # Solo local: lo consume el proxy. El puerto 4321 es el de Astro.
+      - "127.0.0.1:57013:4321"
+    networks:
+      - doly-dev-net
+
 volumes:
   doly-dev-pgdata:
 
