@@ -54,7 +54,7 @@ test_tunnel() {
 }
 
 test_mtls() {
-  titulo "mTLS de los servicios"
+  titulo "TLS / mTLS de los servicios"
   local peer
   for peer in devapi devweb; do
     local ip
@@ -64,29 +64,44 @@ test_mtls() {
       continue
     fi
 
-    # Con certificado de cliente: la API responde.
-    local code
-    code="$(curl -sS -o /dev/null -w '%{http_code}' \
-      --resolve "$peer.yacaterkos.tech:443:$ip" \
-      --cacert "$VPN_DIR/runtime/$peer/ca.crt" \
-      --cert "$VPN_DIR/ca/certs/jxadevp-dev/chain.pem" \
-      --key "$VPN_DIR/ca/certs/jxadevp-dev/key.pem" \
-      "https://$peer.yacaterkos.tech/api/v1/health/live" 2>/dev/null || echo 000)"
-    if [ "$code" = "200" ]; then
-      ok "$peer responde con certificado de cliente (HTTP 200)"
-    else
-      ko "$peer con certificado de cliente devolvio HTTP $code"
-    fi
+    local verify_mode code
+    verify_mode="$(docker exec "doly-vpn-$peer" grep -E '^\s*ssl_verify_client\s+' /etc/nginx/nginx.conf 2>/dev/null \
+      | awk '{gsub(";", "", $2); print $2}' | head -1 || true)"
 
-    # Sin certificado: el servidor lo rechaza.
-    code="$(curl -sS -o /dev/null -w '%{http_code}' \
-      --resolve "$peer.yacaterkos.tech:443:$ip" \
-      --cacert "$VPN_DIR/runtime/$peer/ca.crt" \
-      "https://$peer.yacaterkos.tech/api/v1/health/live" 2>/dev/null || echo 000)"
-    if [ "$code" = "400" ] || [ "$code" = "403" ]; then
-      ok "$peer rechaza a quien no tiene certificado (HTTP $code)"
+    if [ "$verify_mode" = "off" ]; then
+      # Acceso directo con TLS publico (Let's Encrypt) sin certificado de cliente.
+      code="$(curl -sS -o /dev/null -w '%{http_code}' \
+        --resolve "$peer.yacaterkos.tech:443:$ip" \
+        "https://$peer.yacaterkos.tech/api/v1/health/live" 2>/dev/null || echo 000)"
+      if [ "$code" = "200" ]; then
+        ok "$peer responde con TLS valido y sin certificado de cliente (HTTP 200)"
+      else
+        ko "$peer sin certificado de cliente devolvio HTTP $code (se esperaba 200)"
+      fi
     else
-      ko "$peer sin certificado devolvio HTTP $code (deberia rechazar)"
+      # Con certificado de cliente: la API responde.
+      code="$(curl -sS -o /dev/null -w '%{http_code}' \
+        --resolve "$peer.yacaterkos.tech:443:$ip" \
+        --cacert "$VPN_DIR/runtime/$peer/ca.crt" \
+        --cert "$VPN_DIR/ca/certs/jxadevp-dev/chain.pem" \
+        --key "$VPN_DIR/ca/certs/jxadevp-dev/key.pem" \
+        "https://$peer.yacaterkos.tech/api/v1/health/live" 2>/dev/null || echo 000)"
+      if [ "$code" = "200" ]; then
+        ok "$peer responde con certificado de cliente (HTTP 200)"
+      else
+        ko "$peer con certificado de cliente devolvio HTTP $code"
+      fi
+
+      # Sin certificado: el servidor lo rechaza.
+      code="$(curl -sS -o /dev/null -w '%{http_code}' \
+        --resolve "$peer.yacaterkos.tech:443:$ip" \
+        --cacert "$VPN_DIR/runtime/$peer/ca.crt" \
+        "https://$peer.yacaterkos.tech/api/v1/health/live" 2>/dev/null || echo 000)"
+      if [ "$code" = "400" ] || [ "$code" = "403" ]; then
+        ok "$peer rechaza a quien no tiene certificado (HTTP $code)"
+      else
+        ko "$peer sin certificado devolvio HTTP $code (deberia rechazar)"
+      fi
     fi
   done
 }

@@ -18,6 +18,7 @@ set -euo pipefail
 PEER_NAME="${PEER_NAME:?falta PEER_NAME}"
 APP_TARGET="${APP_TARGET:?falta APP_TARGET}"
 LISTEN_PORT="${LISTEN_PORT:-443}"
+MTLS_VERIFY="${MTLS_VERIFY:-on}"
 
 log() { echo "[peer:$PEER_NAME] $*"; }
 
@@ -60,7 +61,7 @@ if [ -n "${APP_CMD:-}" ]; then
 fi
 
 # --- 4. nginx --------------------------------------------------------------
-log "configurando nginx (mTLS -> $APP_TARGET)"
+log "configurando nginx (mTLS=${MTLS_VERIFY} -> $APP_TARGET)"
 
 # La IP de tunel es la direccion de la interfaz: ahi se escucha el puerto.
 TUNNEL_IP="$(ip -4 -o addr show wg0 | awk '{print $4}' | cut -d/ -f1)"
@@ -72,12 +73,12 @@ log "IP de tunel: $TUNNEL_IP"
 
 # El upstream se separa en host y puerto: envsubst no maneja el ':' de
 # `host:port` dentro de un valor de nginx.
-export TUNNEL_IP LISTEN_PORT
+export TUNNEL_IP LISTEN_PORT MTLS_VERIFY
 export APP_HOST="${APP_TARGET%%:*}"
 export APP_PORT="${APP_TARGET##*:}"
 # Solo se sustituyen las variables de DolyNation: envsubst tambien
 # tocaria las de nginx ($host, $remote_addr...) y las dejaria vacias.
-envsubst '${TUNNEL_IP} ${LISTEN_PORT} ${APP_HOST} ${APP_PORT}' \
+envsubst '${TUNNEL_IP} ${LISTEN_PORT} ${APP_HOST} ${APP_PORT} ${MTLS_VERIFY}' \
     < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
 # nginx corre en primer plano para que el contenedor muera si el proceso

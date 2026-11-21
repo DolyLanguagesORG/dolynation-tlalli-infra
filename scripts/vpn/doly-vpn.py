@@ -33,6 +33,8 @@ CA_DIR = BASE / "ca"
 PEERS_DIR = BASE / "peers"
 BUNDLES_DIR = BASE / "bundles"
 WG_DIR = pathlib.Path("/etc/wireguard")
+LE_LIVE_DIR = pathlib.Path("/etc/letsencrypt/live/doly-vpn-dev")
+LE_SERVICES = ("devapi", "devweb")
 
 # Formato del material sellado: "DOLYVPN1" | salt(16) | nonce(12) | ciphertext
 SEAL_MAGIC = b"DOLYVPN1"
@@ -514,65 +516,73 @@ Acceso a los ambientes de desarrollo de DolyNation por una red privada
 
 Que necesitas
 -------------
+Solo necesitas **1 archivo**: tu configuracion de WireGuard (`wg0.conf`,
+o `wg-dev.conf` si tienes dos identidades).
+
+`devweb.yacaterkos.tech` y `devapi.yacaterkos.tech` usan HTTPS real con
+certificado de Let's Encrypt y no exigen certificado de cliente en el
+navegador: **no hace falta instalar `ca.crt` ni importar `.p12`** para
+desarrollar.
+
 1. Instalar WireGuard (https://www.wireguard.com/install/).
 
-   En Linux hace falta tambien el resolvedor de DNS, porque el config
-   lleva `DNS = 10.90.0.1` y `wg-quick` lo aplica al arrancar. Sin el,
-   `wg-quick up` falla y la interfaz no sube:
+   En Linux, si vas a usar `wg-quick`, hace falta tambien el resolvedor de
+   DNS porque el config lleva `DNS = 10.90.0.1`:
 
      Arch            sudo pacman -S systemd-resolvconf
      Debian / Ubuntu sudo apt install openresolv
      Fedora          sudo dnf install openresolv
 
-   Si el error es `resolvconf: signature mismatch`: `sudo resolvconf -u`.
+   Si sale `resolvconf: signature mismatch`: `sudo resolvconf -u`.
 
-2. Copiar los ficheros de configuracion a /etc/wireguard/  (Linux)
-   o importarlos desde la app de WireGuard               (Windows/macOS).
-3. Instalar la CA publica en el sistema para que el navegador confie:
-     Linux    sudo cp ca.crt /usr/local/share/ca-certificates/doly-vpn.crt
-              sudo update-ca-certificates
-     macOS    sudo security add-trusted-cert -d -r trustRoot \\
-              -k /Library/Keychains/System.keychain ca.crt
-     Windows  Importar en "Autoridades de certificacion raiz de confianza".
-4. Importar el .p12 de la identidad en el navegador para el mTLS.
-   Contrasena del p12: la passphrase de la CA.
+2. Importar SOLO tu `.conf` (`wg0.conf`, o `wg-dev.conf` / `wg-admin.conf`):
+   - Windows / macOS / Android / iOS: abre la app de WireGuard, importa
+     el `.conf` y activa el tunel (la app aplica el DNS sola; en movil
+     marca "Override DNS" si aparece la opcion).
+   - Linux con NetworkManager (menu de red del escritorio): importa el
+     archivo una vez (`nmcli connection import type wireguard file wg-dev.conf`)
+     o usa el metodo por terminal abajo.
 
-Como usarlo
------------
-Hay dos formas, y hacen lo mismo.
+3. Abrir https://devweb.yacaterkos.tech o https://devapi.yacaterkos.tech
+   y listo.
+
+Como conectarse y desconectarse en Linux
+----------------------------------------
+Hay dos formas (usa solo una, no las mezcles a la vez).
 
 ### Con NetworkManager (el menu de red del escritorio)
 
-Es la forma mas comoda: la conexion ya esta creada ("wg-dev" y
-"wg-admin"). Conectate y desconectate desde el icono de red del panel,
-o con:
+Es la forma mas comoda: importas la conexion una vez y la prendes o
+apagas desde el icono/menu de red del panel o con:
 
   nmcli connection up wg-dev      # conectar
   nmcli connection down wg-dev    # desconectar
   nmcli connection show           # ver las conexiones
 
-Si tu sistema usa systemd-resolved, el DNS de la VPN necesita que
-NetworkManager se lo pase al resolved. Si al conectar el nombre
-`devapi.yacaterkos.tech` no resuelve a 10.90.0.2, anade esto y
-reinicia:
+Con una sola identidad el nombre sera `wg0`. Si tu sistema usa
+`systemd-resolved` y al conectar `devapi.yacaterkos.tech` no resuelve a
+`10.90.0.2`, anade `/etc/NetworkManager/conf.d/00-dns.conf`:
 
-  # /etc/NetworkManager/conf.d/00-dns.conf
   [main]
   dns=systemd-resolved
   systemd-resolved=true
 
-  sudo systemctl restart NetworkManager
+luego `sudo systemctl restart NetworkManager`, y si la red local sigue
+compitiendo por el DNS:
+
+  nmcli connection modify wg-dev ipv4.dns-search "~." ipv4.dns-priority -50
+  nmcli connection up wg-dev
 
 ### Con wg-quick (la terminal)
 
-  sudo wg-quick up wg-dev      # identidad de desarrollo
-  sudo wg-quick up wg-admin    # identidad de administracion
-  sudo wg-quick down wg-dev    # bajar una identidad
+Copia tu `.conf` a `/etc/wireguard/` con permisos `600` y usa:
+
+  sudo wg-quick up wg-dev      # conectar (o wg0 si tienes un solo archivo)
+  sudo wg-quick down wg-dev    # desconectar
   sudo wg show wg-dev          # ver el estado (handshake, trafico)
 
 Si `wg-quick up` falla con "resolvconf: command not found" o con
-"signature mismatch", falta el resolvedor de DNS (ver el paso 1). Sin el,
-la interfaz no sube.
+"signature mismatch", falta el resolvedor de DNS (ver arriba).
 
 El DNS
 ------
@@ -583,13 +593,10 @@ los servicios resuelven a su IP DE TUNEL, no a la IP publica de Cloudflare.
   devweb.yacaterkos.tech  ->  10.90.0.3
   minios.doly.internal    ->  10.90.0.4
 
-Sin esa linea, el navegador resolveria el nombre por tu conexion normal
-de internet y la peticion saldria del servidor SIN pasar por el tunel: la
-VPN no filtraria nada. Con `wg-quick` el DNS se aplica solo; en la app
-mobil hay que marcar "Override DNS" si aparece la opcion.
+Sin ese DNS, el navegador resolveria el nombre por tu internet normal y
+no entraria por el tunel. Comprobacion dentro de la VPN:
 
-Comprobacion: dentro de la VPN, el nombre debe resolver a una IP que
-empiece por 10.90.
+  dig +short devapi.yacaterkos.tech    # debe devolver 10.90.0.2
 
 Que son las identidades
 -----------------------
@@ -605,8 +612,6 @@ Son identidades separadas a proposito: la de desarrollo no puede tocar
 el plano de administracion, aunque la persona seas la misma. Asi una
 identidad que se filtra no arrastra a la otra.
 
-Cada identidad tiene su .p12, y el log del servidor dice cual se uso.
-
 Direcciones utiles (resuelven a la IP de tunel dentro de la VPN)
 ----------------------------------------------------------------
   {dns}
@@ -616,9 +621,17 @@ El ambiente de desarrollo se alcanza en:
   https://devapi.yacaterkos.tech     (API)
   https://minios.doly.internal:50090 (almacenamiento de objetos)
 
+Opcional — solo si entras directo a MinIO (`minios.doly.internal:50090`)
+-----------------------------------------------------------------------
+MinIO usa la CA interna de DolyNation y mTLS (Let's Encrypt no firma
+dominios `.internal`). Si necesitas entrar directo a MinIO:
+1. Instala `ca.crt` en los certificados de confianza del sistema.
+2. Importa tu `.p12` en el navegador (contrasena: la passphrase de la CA).
+
 Notas
 -----
-- La red no da acceso a internet: solo a los servicios de DolyNation.
+- La VPN solo enruta las IPs internas de DolyNation; el resto de tu internet
+  sigue funcionando normal.
 - Si pierdes este paquete, pide uno nuevo: no se puede regenerar igual.
 - No lo subas a ningun repositorio ni a un chat compartido.
 """
@@ -820,15 +833,23 @@ def runtime_build():
         )
         write_secret(r / "wg0.conf", wg_conf)
 
-        # Llave y certificado TLS del servicio.
+        # Llave y certificado TLS del servicio: devapi/devweb usan Let's Encrypt
+        # cuando esta emitido en el host; minios (y respaldo sin LE) usa CA interna.
         certs = CA_DIR / "certs" / name
-        write_secret(r / "server.key", unseal_file(d / "tls-privatekey.sealed", pw))
+        le_fullchain = LE_LIVE_DIR / "fullchain.pem"
+        le_privkey = LE_LIVE_DIR / "privkey.pem"
         # La IP de tunel del peer, para las comprobaciones.
         write_secret(r / "meta.ip", ip + "\n", 0o644)
         write_secret(r / "meta.name", name + "\n", 0o644)
-        # El certificado del servidor con su cadena: el navegador (y curl)
-        # necesitan la intermedia para validar al servidor.
-        shutil.copy(certs / "chain.pem", r / "server.crt")
+        if name in LE_SERVICES and le_fullchain.exists() and le_privkey.exists():
+            shutil.copy(le_fullchain, r / "server.crt")
+            os.chmod(r / "server.crt", 0o644)
+            write_secret(r / "server.key", le_privkey.read_text().strip())
+        else:
+            write_secret(r / "server.key", unseal_file(d / "tls-privatekey.sealed", pw))
+            # El certificado del servidor con su cadena: el navegador (y curl)
+            # necesitan la intermedia para validar al servidor.
+            shutil.copy(certs / "chain.pem", r / "server.crt")
 
         # El bundle de CA (intermedia + raiz) es lo que necesita nginx
         # para validar el certificado del cliente: con solo la intermedia

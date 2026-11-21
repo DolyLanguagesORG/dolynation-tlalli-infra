@@ -1,11 +1,9 @@
-# nginx del peer de servicio: TLS con mTLS y proxy hacia la aplicacion.
+# nginx del peer de servicio: TLS (Let's Encrypt o CA interna) y proxy hacia la aplicacion.
 #
-# El certificado del servidor lo firma la CA interna de DolyNation y lo
-# emite el hub (en el certificado del peer). El certificado de cliente lo
-# pide cada developer: sin el, la conexion se rechaza.
-#
-# El certificado de la CA va en ca.crt (intermedia + raiz), que es lo que
-# permite que el navegador de cada developer valide al servidor.
+# El certificado del servidor viene montado en /etc/wireguard/server.crt y
+# server.key (Let's Encrypt para devapi/devweb o CA interna para minios).
+# Con MTLS_VERIFY=on exige certificado de cliente firmado por la CA interna;
+# con MTLS_VERIFY=off basta con estar dentro del tunel WireGuard.
 
 user  nginx;
 worker_processes  auto;
@@ -32,9 +30,10 @@ http {
     log_format peer '$time_iso8601 $remote_addr cn=$ssl_client_s_dn';
     access_log /dev/stdout peer;
 
-    # El certificado de cliente: la CA interna de DolyNation.
+    # El certificado de cliente (mTLS): off para acceso directo en dev con
+    # certificado Let's Encrypt, on para servicios que exigen .p12 (minios).
     ssl_client_certificate  /etc/wireguard/ca.crt;
-    ssl_verify_client       on;
+    ssl_verify_client       ${MTLS_VERIFY};
     ssl_verify_depth        2;
 
     # Solo TLS moderno. Nada de TLSv1.0 ni TLSv1.1.

@@ -1,7 +1,8 @@
 # VPN de DolyNation
 
-Los scripts de la VPN de desarrollo: WireGuard con mTLS, las tres
-familias de red y el peer de MinIO.
+Los scripts de la VPN de desarrollo: WireGuard, las tres
+familias de red, TLS Let's Encrypt DNS-01 en `devapi`/`devweb` (`MTLS_VERIFY=off`)
+y el peer de MinIO con CA interna y mTLS (`MTLS_VERIFY=on`).
 
 **Ninguno de estos ficheros lleva material secreto.** Las llaves
 privadas, los PSKs y la passphrase de la CA viven solo en el servidor,
@@ -17,7 +18,8 @@ parte publica: la logica, las plantillas y las comprobaciones.
 | `vpn-firewall.sh` | Reglas de iptables: que entra, que sale y que familia habla con cual |
 | `vpn-up.sh` | Levanta y baja el hub y los peers de servicio |
 | `vpn-sshd.sh` | Endurece el SSH (puerto 50022, sin root, sin forwarding) |
-| `vpn-test.sh` | Comprueba el tunel, el mTLS y el aislamiento entre familias |
+| `vpn-test.sh` | Comprueba el tunel, el TLS/mTLS y el aislamiento entre familias |
+| `vpn-tls-sync.sh` | Copia el cert Let's Encrypt a `runtime/{devapi,devweb}` y recarga nginx |
 | `vpn-install.sh` | Instala las unidades de systemd y la persistencia |
 | `minio-setup.py` | Crea el bucket y las credenciales de la aplicacion |
 | `Dockerfile.peer` | Imagen de los peers de servicio (WireGuard + nginx con mTLS) |
@@ -35,6 +37,7 @@ sudo install -m 0750 vpn-firewall.sh   /etc/doly-vpn/vpn-firewall.sh
 sudo install -m 0750 vpn-up.sh         /etc/doly-vpn/vpn-up.sh
 sudo install -m 0750 vpn-sshd.sh       /etc/doly-vpn/vpn-sshd.sh
 sudo install -m 0750 vpn-test.sh       /etc/doly-vpn/vpn-test.sh
+sudo install -m 0750 vpn-tls-sync.sh   /etc/doly-vpn/vpn-tls-sync.sh
 sudo install -m 0750 vpn-install.sh    /etc/doly-vpn/vpn-install.sh
 sudo install -m 0750 minio-setup.py    /usr/local/sbin/doly-minio-setup
 sudo install -m 0750 decrypt.py        /usr/local/sbin/doly-vpn-decrypt
