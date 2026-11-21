@@ -92,6 +92,12 @@ jobs:
 
           repo = os.environ['REPOSITORY']
           version = os.environ['VERSION'].lstrip('v')
+          # La version publicada con su propio nombre: mas abajo, el bucle
+          # que busca las filas de los repos de la app REASIGNA `version` con
+          # el resultado de una busqueda (un `re.Match`). Si se usara `version`
+          # despues de ese bucle, el manifiesto receberia el texto
+          # `<re.Match object: ...>` en vez de un numero.
+          version_publicada = version
           sha = os.environ.get('SHA', '').strip()
 
           path = pathlib.Path('versions.yml')
@@ -163,7 +169,7 @@ jobs:
           if repo in SITE_REPOS:
               text = re.sub(
                   r'^site_version: .*$',
-                  f'site_version: {version}',
+                  f'site_version: {version_publicada}',
                   text,
                   count=1,
                   flags=re.MULTILINE,
@@ -242,7 +248,14 @@ jobs:
           fi
 
           for i in $(seq 1 20); do
-            checks="$(gh pr checks "$existing" --repo "${{ github.repository }}" --required --json name,state 2>/dev/null || echo '[]')"
+            # Se miran **TODOS** los checks, no solo los que la proteccion de
+            # ramas exige. Con `--required` el bot se saltaba el check
+            # "Validar el manifiesto" (que no es requerido) y mergeaba un
+            # manifiesto roto: el `site_version` llego a develop con el texto
+            # `<re.Match object: ...>` en vez de un numero.
+            #
+            # Los checks que no se disparan no aparecen: no se espera a ellos.
+            checks="$(gh pr checks "$existing" --repo "${{ github.repository }}" --json name,state,isRequired 2>/dev/null || echo '[]')"
 
             total="$(printf '%s' "$checks" | jq 'length')"
             pendientes="$(printf '%s' "$checks" | jq '[.[] | select(.state != "SUCCESS" and .state != "SKIPPED")] | length')"
@@ -250,6 +263,7 @@ jobs:
 
             if [ "$fallidos" -gt 0 ]; then
               echo "::warning::Un check del PR del manifiesto fallo: no se mergea."
+              printf '%s' "$checks" | jq -r '.[] | "  \(.name): \(.state)"'
               exit 0
             fi
 
