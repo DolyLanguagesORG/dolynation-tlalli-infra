@@ -206,7 +206,12 @@ jobs:
           title="chore(versions): actualizar ${REPOSITORY} a v${bare}"
 
           # Si el manifiesto ya decia lo mismo, no hay nada que abrir.
-          if git diff --quiet -- versions.yml; then
+          #
+          # Ojo: se miran LOS DOS. El cambio de la landing vive en
+          # `versions-site.yml`, asi que mirar solo `versions.yml` hacia
+          # pensar que no habia nada que abrir (y el release del sitio se
+          # perdia en silencio).
+          if git diff --quiet -- versions.yml versions-site.yml; then
             echo "El manifiesto ya estaba al dia con v${bare}: no se abre PR."
             exit 0
           fi
