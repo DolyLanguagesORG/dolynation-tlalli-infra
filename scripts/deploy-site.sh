@@ -23,7 +23,10 @@ set -euo pipefail
 
 ORG_DIR="${ORG_DIR:-/srv/doly}"
 ENV_DIR="${ENV_DIR:-$ORG_DIR/$COMPOSE_PROJECT_NAME}"
-MANIFEST="${MANIFEST:-$ORG_DIR/dolynation-tlalli-infra/versions.yml}"
+# El manifiesto DEL SITIO, no el de la aplicacion: la landing es un producto
+# aparte, con su propia linea de releases. Publicarla no toca ni una linea
+# del manifiesto de la app.
+MANIFEST="${MANIFEST:-$ORG_DIR/dolynation-tlalli-infra/versions-site.yml}"
 REGISTRY="${REGISTRY:-ghcr.io}"
 REPO_DIR="${REPO_DIR:-$ORG_DIR/dolynation-tlalli-infra}"
 
@@ -94,10 +97,26 @@ for i in $(seq 1 20); do
   if curl -fsS "http://127.0.0.1:${LANDING_HOST_PORT:-57023}/" >/dev/null 2>&1; then
     log "OK tras $((i * 3))s"
     docker compose -f docker-compose.site.yml ps landing
-    exit 0
+    break
+  fi
+  if [ "$i" = "20" ]; then
+    log "ERROR: la landing no responde tras 60s"
+    docker compose -f docker-compose.site.yml logs --tail 40 landing 2>&1 || true
+    exit 1
   fi
 done
 
-log "ERROR: la landing no responde tras 60s"
-docker compose -f docker-compose.site.yml logs --tail 40 landing 2>&1 || true
-exit 1
+# --- 7. Smoke test: el CONTRATO del sitio, no que "haya algo" --------------
+# Un despliegue que no comprueba nada es un despliegue a ciegas. El smoke
+# falla si el sitio no cumple lo que promete (pagina con contenido, assets,
+# cache, cabeceras).
+SMOKE="$REPO_DIR/scripts/smoke-site.sh"
+if [ -x "$SMOKE" ]; then
+  log "Smoke test del sitio"
+  bash "$SMOKE" "http://127.0.0.1:${LANDING_HOST_PORT:-57023}" "$LANDING_VERSION" \
+    || { log "ERROR: el sitio no cumple el contrato"; exit 1; }
+else
+  log "AVISO: no esta $SMOKE: el despliegue se da por bueno sin smoke"
+fi
+
+exit 0
