@@ -36,10 +36,13 @@ test_tunnel() {
 
   local peers
   peers="$(wg show "$WG_IF" peers | wc -l)"
-  if [ "$peers" -eq 10 ]; then
-    ok "el hub tiene 10 peers"
+  # 10 peers de las personas (5 developers con 2 identidades y 1 admin) y
+  # los de servicio (devapi, devweb, devsite, minios). Con `devsite` son 11.
+  local esperados=11
+  if [ "$peers" -eq "$esperados" ]; then
+    ok "el hub tiene $esperados peers"
   else
-    ko "el hub tiene $peers peers (se esperaban 10)"
+    ko "el hub tiene $peers peers (se esperaban $esperados)"
   fi
 
   # Los peers de servicio (los que viven en contenedores) deben tener
@@ -104,6 +107,25 @@ test_mtls() {
       fi
     fi
   done
+
+  # La landing (devsite) no es una API: su raiz es la pagina. Se comprueba
+  # aparte, con el mismo TLS real (Let's Encrypt) y sin certificado de
+  # cliente: se abre en el navegador desde dentro de la VPN.
+  local site_ip
+  site_ip="$(cat "$VPN_DIR/runtime/devsite/meta.ip" 2>/dev/null || echo "")"
+  if [ -z "$site_ip" ]; then
+    ko "devsite: no se conoce su IP de tunel"
+  else
+    local code
+    code="$(curl -sS -o /dev/null -w '%{http_code}' \
+      --resolve "devsite.yacaterkos.tech:443:$site_ip" \
+      "https://devsite.yacaterkos.tech/" 2>/dev/null || echo 000)"
+    if [ "$code" = "200" ]; then
+      ok "devsite responde con TLS valido y sin certificado de cliente (HTTP 200)"
+    else
+      ko "devsite devolvio HTTP $code (se esperaba 200)"
+    fi
+  fi
 }
 
 test_familias() {
@@ -218,6 +240,7 @@ test_dns() {
   local par
   for par in "devapi.yacaterkos.tech 10.90.0.2" \
              "devweb.yacaterkos.tech 10.90.0.3" \
+             "devsite.yacaterkos.tech 10.90.0.5" \
              "minios.doly.internal 10.90.0.4"; do
     set -- $par
     local nombre="$1" esperado="$2"
