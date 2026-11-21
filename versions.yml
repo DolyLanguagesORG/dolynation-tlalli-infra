@@ -1,6 +1,6 @@
 project: dolynation
 app_version: 0.12.0
-site_version: 0.1.0
+site_version: <re.Match object; span=(0, 19), match='    version: 0.10.0'>
 updated: '2026-11-21'
 repositories:
   dolynation-atl-back:
@@ -12,9 +12,9 @@ repositories:
     tag: v0.10.0
     commit: daf681b27327d664778e9b7077a7db140b1a65cf
   dolynation-tetl-landing:
-    version: 0.1.0
-    tag: v0.1.0
-    commit: a159c4c2d6e45c19bc8fa3183910a1c870d839fe
+    version: 0.1.1
+    tag: v0.1.1
+    commit: 5a5c04a6b5f4b5137f5ddd2a1114eb67e83e4104
   dolynation-tlalli-infra:
     version: 0.15.0
     tag: v0.15.0
