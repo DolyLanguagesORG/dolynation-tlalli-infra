@@ -115,6 +115,7 @@ jobs:
           # directory".
           tar -czf - \
             docker-compose.env.yml \
+            docker-compose.site.yml \
             versions.yml \
             scripts \
             database \

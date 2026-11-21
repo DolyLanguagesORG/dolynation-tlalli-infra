@@ -100,7 +100,13 @@ jobs:
           version_publicada = version
           sha = os.environ.get('SHA', '').strip()
 
-          path = pathlib.Path('versions.yml')
+          # Cada repo tiene SU manifiesto. La landing es un producto aparte
+          # (otro dominio, otro despliegue) y por eso NO comparte manifiesto
+          # con la aplicacion: publicar la landing no toca ni una linea del
+          # manifiesto de la app.
+          SITE_REPOS = ('dolynation-tetl-landing',)
+          manifest_name = 'versions-site.yml' if repo in SITE_REPOS else 'versions.yml'
+          path = pathlib.Path(manifest_name)
           text = path.read_text()
 
           # Localiza la fila del repositorio dentro de `repositories:` y
@@ -112,7 +118,7 @@ jobs:
               re.MULTILINE,
           )
           if not pattern.search(text):
-              print(f'::error::No se encontro la fila de {repo} en versions.yml')
+              print(f'::error::No se encontro la fila de {repo} en {manifest_name}')
               sys.exit(1)
 
           block = f'    version: {version}\n    tag: v{version}\n'
@@ -148,7 +154,9 @@ jobs:
               if version:
                   versiones.append(version.group(1).strip())
 
-          if versiones:
+          # El `app_version` solo existe en el manifiesto de la aplicacion.
+          # En el del sitio no se toca: son dos productos con dos ciclos.
+          if versiones and repo not in SITE_REPOS:
               mayor = max(versiones, key=como_version)
               text = re.sub(
                   r'^app_version: .*$',
@@ -165,7 +173,6 @@ jobs:
           #
           # Cuando publica la landing, se mueve SOLO su version: la
           # `app_version` se calcula con backend y frontend y no le afecta.
-          SITE_REPOS = ('dolynation-tetl-landing',)
           if repo in SITE_REPOS:
               text = re.sub(
                   r'^site_version: .*$',
@@ -207,7 +214,8 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$branch"
-          git add versions.yml
+          # Se anade el manifiesto que cambio: el de la app o el del sitio.
+          git add versions.yml versions-site.yml
           git commit -m "chore(versions): actualizar ${REPOSITORY} a v${bare}"
           git push --force origin "$branch"
 
