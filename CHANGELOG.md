@@ -11,6 +11,13 @@ un PR de release contra `develop` que sube la versión y escribe esta sección; 
 mergearlo se crean el tag anotado y la GitHub Release. Ver
 [`conventions/versioning.md`](https://github.com/DolyLanguagesORG/dolynation-ehecatl-docs/blob/develop/conventions/versioning.md).
 
+## [0.13.0](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.12.0...v0.13.0) (2026-11-21)
+
+
+### Features
+
+* **vpn:** el config no lleva DNS y el instalador deja todo listo ([#224](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/224)) ([87ecd21](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/87ecd210181414f8f39980f844b0534e7caa18b5)), closes [#214](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/214)
+
 ## [0.12.0](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.11.1...v0.12.0) (2026-11-21)
 
 
