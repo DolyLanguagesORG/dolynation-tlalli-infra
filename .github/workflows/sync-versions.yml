@@ -255,7 +255,10 @@ jobs:
             # `<re.Match object: ...>` en vez de un numero.
             #
             # Los checks que no se disparan no aparecen: no se espera a ellos.
-            checks="$(gh pr checks "$existing" --repo "${{ github.repository }}" --json name,state,isRequired 2>/dev/null || echo '[]')"
+            #
+            # Ojo: `gh pr checks --json` solo acepta `name` y `state` (y
+            # `bucket`); `isRequired` NO existe y hace fallar el comando.
+            checks="$(gh pr checks "$existing" --repo "${{ github.repository }}" --json name,state 2>/dev/null || echo '[]')"
 
             total="$(printf '%s' "$checks" | jq 'length')"
             pendientes="$(printf '%s' "$checks" | jq '[.[] | select(.state != "SUCCESS" and .state != "SKIPPED")] | length')"
