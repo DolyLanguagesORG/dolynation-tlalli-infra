@@ -63,12 +63,12 @@ if [ -z "$TUNNEL_IP" ]; then
 fi
 log "IP de tunel: $TUNNEL_IP"
 
-export TUNNEL_IP LISTEN_PORT="${LISTEN_PORT:-50090}"
+export TUNNEL_IP LISTEN_PORT="${LISTEN_PORT:-50090}" MTLS_VERIFY="${MTLS_VERIFY:-on}"
 export APP_HOST="127.0.0.1"
 export APP_PORT="9000"
 # Solo se sustituyen las variables de DolyNation: envsubst tambien
 # tocaria las de nginx ($host, $remote_addr...) y las dejaria vacias.
-envsubst '${TUNNEL_IP} ${LISTEN_PORT} ${APP_HOST} ${APP_PORT}' \
+envsubst '${TUNNEL_IP} ${LISTEN_PORT} ${APP_HOST} ${APP_PORT} ${MTLS_VERIFY}' \
     < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
 exec nginx -g 'daemon off;'

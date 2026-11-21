@@ -1,9 +1,9 @@
 # Peers de servicio de la VPN de DolyNation.
 #
 # Cada servicio es un peer con su propia identidad criptografica:
-#   devapi  10.90.0.2   termina TLS+mTLS y reenvia al backend de dev
-#   devweb  10.90.0.3   termina TLS+mTLS y reenvia al frontend de dev
-#   minios  10.90.0.4   el almacenamiento de objetos (S3)
+#   devapi  10.90.0.2   termina TLS Let's Encrypt (MTLS_VERIFY=off) y reenvia al backend de dev
+#   devweb  10.90.0.3   termina TLS Let's Encrypt (MTLS_VERIFY=off) y reenvia al frontend de dev
+#   minios  10.90.0.4   termina TLS CA interna + mTLS (MTLS_VERIFY=on) para almacenamiento S3
 #
 # El trafico sale de la VPN hacia el hub, que lo reenruta. El servicio no
 # publica ningun puerto en la red de Docker: su unica entrada es la
@@ -33,6 +33,7 @@ services:
       PEER_NAME: devapi
       APP_TARGET: backend:3333
       LISTEN_PORT: "443"
+      MTLS_VERIFY: "off"
     volumes:
       - /etc/doly-vpn/runtime/devapi:/etc/wireguard:ro
     networks:
@@ -47,6 +48,7 @@ services:
       PEER_NAME: devweb
       APP_TARGET: frontend:3000
       LISTEN_PORT: "443"
+      MTLS_VERIFY: "off"
     volumes:
       - /etc/doly-vpn/runtime/devweb:/etc/wireguard:ro
     networks:
@@ -69,6 +71,7 @@ services:
       PEER_NAME: minios
       APP_TARGET: minio:9000
       LISTEN_PORT: "50090"
+      MTLS_VERIFY: "on"
       MINIO_BROWSER_REDIRECT_URL: https://minios.doly.internal:50091
     # Las credenciales de MinIO estan en un fichero 600 que solo root lee.
     # Nunca en el compose ni en un repo.
