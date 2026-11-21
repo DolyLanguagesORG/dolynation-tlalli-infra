@@ -36,13 +36,13 @@ echo
 
 echo "### Manifiesto de versiones (versions.yml, en el repo de infra)"
 for repo in "${REPOS[@]}"; do
-  v=$(gh_json "repos/$ORG/dolynation-tlalli-infra/contents/versions.yml" | python3 -c "
-import json,sys,base64,re
+  # La version PUBLICADA de este repo (la de su ultima release) y la que
+  # declara el manifiesto. Si no coinciden, el manifiesto va atrasado.
+  v=$(gh_json "repos/$ORG/$repo/releases?per_page=1" | python3 -c "
+import json,sys
 try:
     d=json.load(sys.stdin)
-    t=base64.b64decode(d['content']).decode()
-    m=re.search(r'app_version:\s*(\S+)', t)
-    print(m.group(1) if m else '?')
+    print(d[0]['tag_name'].lstrip('v') if d else '?')
 except Exception:
     print('?')
 " 2>/dev/null)
@@ -56,10 +56,13 @@ try:
 except Exception:
     print('?')
 " 2>/dev/null)
-  printf -- "- %s: %s (manifiesto: %s)\n" "$repo" "$v" "$v_repo"
+  if [ "$v" = "$v_repo" ]; then
+    printf -- "- %s: %s (al dia)\n" "$repo" "$v_repo"
+  else
+    printf -- "- %s: %s (manifiesto: %s) <- DESFASADO\n" "$repo" "$v" "$v_repo"
+  fi
 done
 echo
-
 echo "### Issues abiertos por tipo"
 for label in bug needs:decision type:gap; do
   n=0
