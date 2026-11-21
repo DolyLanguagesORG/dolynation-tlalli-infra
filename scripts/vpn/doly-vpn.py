@@ -34,7 +34,7 @@ PEERS_DIR = BASE / "peers"
 BUNDLES_DIR = BASE / "bundles"
 WG_DIR = pathlib.Path("/etc/wireguard")
 LE_LIVE_DIR = pathlib.Path("/etc/letsencrypt/live/doly-vpn-dev")
-LE_SERVICES = ("devapi", "devweb")
+LE_SERVICES = ("devapi", "devweb", "devsite")
 
 # Formato del material sellado: "DOLYVPN1" | salt(16) | nonce(12) | ciphertext
 SEAL_MAGIC = b"DOLYVPN1"
@@ -47,7 +47,7 @@ SCRYPT_P = 1
 # hablan entre si, y hacia fuera solo por reglas explicitas.
 # --------------------------------------------------------------------------
 FAMILIES = {
-    "servicios": "10.90.0.0/24",  # devapi, devweb, minios (+ hub)
+    "servicios": "10.90.0.0/24",  # devapi, devweb, devsite, minios (+ hub)
     "devs": "10.91.0.0/24",       # laptops del equipo
     "admin": "10.92.0.0/24",      # administracion / operacion
 }
@@ -78,6 +78,7 @@ PEERS = [
     ("devapi",       "servicios", "10.90.0.2", "servicio", "API del ambiente de desarrollo"),
     ("devweb",       "servicios", "10.90.0.3", "servicio", "Web del ambiente de desarrollo"),
     ("minios",       "servicios", "10.90.0.4", "servicio", "Almacenamiento de objetos (S3)"),
+    ("devsite",      "servicios", "10.90.0.5", "servicio", "Landing del ambiente de desarrollo"),
     ("jxadevp-dev",  "devs",      "10.91.0.6", "dev",      "Jesus Alberto: desarrollo"),
     ("jxadevp-admin", "admin",     "10.92.0.2", "admin",    "Jesus Alberto: administracion"),
     ("sebastian-dev", "devs",      "10.91.0.2", "dev",      "Sebastian: desarrollo"),
@@ -97,12 +98,14 @@ PERSONAS_DUALES = {
 SERVICE_NAMES = {
     "devapi": "devapi.yacaterkos.tech",
     "devweb": "devweb.yacaterkos.tech",
+    "devsite": "devsite.yacaterkos.tech",
     "minios": "minios.doly.internal",
 }
 
 SERVICE_PORTS = {
     "devapi": 443,
     "devweb": 443,
+    "devsite": 443,
     "minios": 50090,
 }
 
