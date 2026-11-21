@@ -11,6 +11,13 @@ un PR de release contra `develop` que sube la versión y escribe esta sección; 
 mergearlo se crean el tag anotado y la GitHub Release. Ver
 [`conventions/versioning.md`](https://github.com/DolyLanguagesORG/dolynation-ehecatl-docs/blob/develop/conventions/versioning.md).
 
+## [0.14.0](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.13.0...v0.14.0) (2026-11-21)
+
+
+### Features
+
+* **infra:** agrega schema y variables de despliegue para google oauth ([#229](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/229)) ([460134a](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/460134a1bc77494b5cc65b249fb2899a4e707299))
+
 ## [0.13.0](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.12.0...v0.13.0) (2026-11-21)
 
 
