@@ -14,7 +14,7 @@ if [ ! -r "$FULLCHAIN" ] || [ ! -r "$PRIVKEY" ]; then
   exit 1
 fi
 
-for svc in devapi devweb; do
+for svc in devapi devweb devsite; do
   target="$RUNTIME_DIR/$svc"
   install -d -m 0700 -o root -g root "$target"
   install -m 0644 -o root -g root "$FULLCHAIN" "$target/server.crt"

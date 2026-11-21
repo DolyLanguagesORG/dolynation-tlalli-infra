@@ -56,6 +56,21 @@ services:
         ipv4_address: 10.98.0.3
       dev: {}
 
+  devsite:
+    <<: *peer
+    container_name: doly-vpn-devsite
+    environment:
+      PEER_NAME: devsite
+      APP_TARGET: landing:4321
+      LISTEN_PORT: "443"
+      MTLS_VERIFY: "off"
+    volumes:
+      - /etc/doly-vpn/runtime/devsite:/etc/wireguard:ro
+    networks:
+      vpn:
+        ipv4_address: 10.98.0.5
+      dev: {}
+
   minios:
     build:
       context: .
