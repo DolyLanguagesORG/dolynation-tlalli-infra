@@ -65,6 +65,12 @@ jobs:
           #
           # La landing se despliega por su cuenta: publicar el sitio no toca
           # ni una linea del manifiesto de la aplicacion.
+          # Se declaran aqui (y no dentro de la funcion) porque la funcion
+          # las rellena y el bloque final las lee: si estuvieran dentro,
+          # aqui no habria forma de verlas.
+          errores = []
+          avisos = []
+
           def validar(fichero, campo_version, repos_que_mandan):
               texto = open(fichero, encoding='utf-8').read()
 
