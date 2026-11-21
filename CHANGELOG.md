@@ -11,6 +11,18 @@ un PR de release contra `develop` que sube la versión y escribe esta sección; 
 mergearlo se crean el tag anotado y la GitHub Release. Ver
 [`conventions/versioning.md`](https://github.com/DolyLanguagesORG/dolynation-ehecatl-docs/blob/develop/conventions/versioning.md).
 
+## [0.12.0](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.11.1...v0.12.0) (2026-11-21)
+
+
+### Features
+
+* **vpn:** acceso simple sin mTLS con TLS Let's Encrypt DNS-01 y LEEME actualizado ([#220](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/220)) ([e53bea6](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/e53bea68d820943679c189821badbe113b660414)), closes [#214](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/214)
+
+
+### Bug Fixes
+
+* **vpn:** el LEEME avisa del resolvedor de DNS y el hub no publica AAAA ([#218](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/218)) ([95f5925](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/95f592598522639caae575eb11efb218577bd9c7)), closes [#214](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/214)
+
 ## [0.11.1](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.11.0...v0.11.1) (2026-11-20)
 
 
