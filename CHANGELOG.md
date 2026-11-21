@@ -11,6 +11,14 @@ un PR de release contra `develop` que sube la versión y escribe esta sección; 
 mergearlo se crean el tag anotado y la GitHub Release. Ver
 [`conventions/versioning.md`](https://github.com/DolyLanguagesORG/dolynation-ehecatl-docs/blob/develop/conventions/versioning.md).
 
+## [0.15.0](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.14.0...v0.15.0) (2026-11-21)
+
+
+### Features
+
+* **infra:** la landing entra en el flujo multirepo ([#235](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/235)) ([e9959cf](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/e9959cfc32be3a56667ad14ecb57739e7c1c9a4f)), closes [#234](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/234)
+* **vpn:** peer devsite para la landing del ambiente de desarrollo ([#237](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/237)) ([1426dd7](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/1426dd73bd2b7e6fadcb4f596e198ced4e944cf2)), closes [#234](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/234)
+
 ## [0.14.0](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.13.0...v0.14.0) (2026-11-21)
 
 
