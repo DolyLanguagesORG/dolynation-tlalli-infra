@@ -514,6 +514,14 @@ Que es esto
 Acceso a los ambientes de desarrollo de DolyNation por una red privada
 (WireGuard). Fuera de la VPN, devapi y devweb no son alcanzables.
 
+Lo primero de todo
+-------------------
+  ./instalar.sh
+
+Ese script deja todo listo: instala WireGuard y el resolvedor de DNS si
+faltan, copia tu configuracion a /etc/wireguard/, instala la CA, importa
+tu certificado en Firefox y levanta la VPN para comprobar que funciona.
+
 Que necesitas
 -------------
 Solo necesitas **1 archivo**: tu configuracion de WireGuard (`wg0.conf`,
@@ -525,15 +533,6 @@ navegador: **no hace falta instalar `ca.crt` ni importar `.p12`** para
 desarrollar.
 
 1. Instalar WireGuard (https://www.wireguard.com/install/).
-
-   En Linux, si vas a usar `wg-quick`, hace falta tambien el resolvedor de
-   DNS porque el config lleva `DNS = 10.90.0.1`:
-
-     Arch            sudo pacman -S systemd-resolvconf
-     Debian / Ubuntu sudo apt install openresolv
-     Fedora          sudo dnf install openresolv
-
-   Si sale `resolvconf: signature mismatch`: `sudo resolvconf -u`.
 
 2. Importar SOLO tu `.conf` (`wg0.conf`, o `wg-dev.conf` / `wg-admin.conf`):
    - Windows / macOS / Android / iOS: abre la app de WireGuard, importa
@@ -581,22 +580,27 @@ Copia tu `.conf` a `/etc/wireguard/` con permisos `600` y usa:
   sudo wg-quick down wg-dev    # desconectar
   sudo wg show wg-dev          # ver el estado (handshake, trafico)
 
-Si `wg-quick up` falla con "resolvconf: command not found" o con
-"signature mismatch", falta el resolvedor de DNS (ver arriba).
-
 El DNS
 ------
-El config lleva `DNS = 10.90.0.1`: el hub de la VPN. Alli los nombres de
-los servicios resuelven a su IP DE TUNEL, no a la IP publica de Cloudflare.
+No hay que configurar nada. Los nombres de los servicios ya resuelven a
+la IP DE TUNEL:
 
   devapi.yacaterkos.tech  ->  10.90.0.2
   devweb.yacaterkos.tech  ->  10.90.0.3
   minios.doly.internal    ->  10.90.0.4
 
-Sin ese DNS, el navegador resolveria el nombre por tu internet normal y
-no entraria por el tunel. Comprobacion dentro de la VPN:
+Esos registros estan en el DNS publico, pero apuntan a una IP privada
+que solo se alcanza por el tunel. Por eso:
 
-  dig +short devapi.yacaterkos.tech    # debe devolver 10.90.0.2
+- Con la VPN puesta, el trafico entra por el tunel (esa IP esta en el
+  `AllowedIPs` del peer).
+- Sin la VPN, la IP no tiene ruta: el servicio no se ve. No hace falta
+  ningun cortafuegos ni ninguna regla en el servidor.
+
+Comprobacion:
+
+  dig +short devapi.yacaterkos.tech    # 10.90.0.2
+  ping -c1 10.90.0.2                   # responde con la VPN puesta
 
 Que son las identidades
 -----------------------
@@ -697,16 +701,18 @@ def bundles_build(only=None):
                 "(identidad: {peer}).\n"
                 "# Generada por doly-vpn.py. Privada: no la compartas.\n"
                 "#\n"
-                "# El DNS apunta al hub (10.90.0.1): alli los nombres de los\n"
-                "# servicios resuelven a su IP DE TUNEL, no a la IP publica de\n"
-                "# Cloudflare. Sin esta linea, el navegador resolveria el\n"
-                "# nombre por internet y la peticion saldria sin pasar por el\n"
-                "# tunel: la VPN no filtraria nada.\n"
+                "# Los nombres de los servicios (devapi.yacaterkos.tech,\n"
+                "# devweb.yacaterkos.tech) resuelven YA a la IP de tunel\n"
+                "# (10.90.0.2 y 10.90.0.3) en el DNS publico. Por eso este\n"
+                "# config no necesita linea DNS: el nombre se resuelve solo y\n"
+                "# el trafico entra por el tunel porque la IP esta en el\n"
+                "# AllowedIPs de mas abajo.\n"
+                "#\n"
+                "# Sin la VPN, esa misma IP no tiene ruta: el servicio no se ve.\n"
                 "\n"
                 "[Interface]\n"
                 "PrivateKey = {priv}\n"
                 "Address = {ip}/32\n"
-                "DNS = {dns}\n"
                 "MTU = {mtu}\n"
                 "\n"
                 "[Peer]\n"
@@ -716,7 +722,7 @@ def bundles_build(only=None):
                 "Endpoint = {endpoint}:{port}\n"
                 "PersistentKeepalive = 25\n"
             ).format(
-                peer=peer, priv=priv, ip=ip, dns=HUB_IP, mtu=WG_MTU, hubpub=hub_pub,
+                peer=peer, priv=priv, ip=ip, mtu=WG_MTU, hubpub=hub_pub,
                 psk=psk, allowed=", ".join(allowed),
                 endpoint=WG_ENDPOINT, port=WG_PORT,
             )
@@ -755,6 +761,21 @@ def bundles_build(only=None):
                   + read_secret(CA_DIR / "root-ca.crt") + "\n")
         write_secret(work / persona / "ca.crt", bundle, 0o644)
         shutil.copy(CA_DIR / "root-ca.crt", work / persona / "root-ca.crt")
+
+        # El instalador: hace todo lo que hay que hacer a mano (instalar
+        # WireGuard, el resolvedor de DNS, copiar el config, instalar la CA
+        # e importar el certificado) en un solo comando. Para que a un
+        # developer le baste con descomprimir y ejecutar.
+        # Se busca junto al generador y tambien en /etc/doly-vpn, que es
+        # donde vive el resto de la instalacion.
+        candidatos = [
+            pathlib.Path(__file__).with_name("instalar.sh"),
+            pathlib.Path("/etc/doly-vpn/instalar.sh"),
+        ]
+        installer = next((c for c in candidatos if c.exists()), None)
+        if installer is not None:
+            shutil.copy(installer, work / persona / "instalar.sh")
+            os.chmod(work / persona / "instalar.sh", 0o755)
         write_secret(work / persona / "LEEME.txt",
                      BUNDLE_README.format(
                          name=persona,
