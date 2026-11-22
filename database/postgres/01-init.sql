@@ -157,6 +157,12 @@ CREATE TABLE readings (
     passed BOOLEAN,
     user_response TEXT,
     feedback TEXT,
+    -- La clave de idempotencia de la evaluacion: la envia el cliente (la
+    -- app PWA la genera al encolar la respuesta sin conexion). Si la misma
+    -- operacion llega dos veces, la segunda devuelve la evaluacion ya hecha
+    -- en vez de error: sin esto, un envio reintentado evaluaria dos veces
+    -- (y la IA cobraria dos veces).
+    evaluation_operation_id VARCHAR(100),
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP,
     deleted_at TIMESTAMP
@@ -165,6 +171,9 @@ CREATE TABLE readings (
 -- Índices para readings
 CREATE INDEX idx_readings_user_id ON readings(user_id);
 CREATE INDEX idx_readings_status ON readings(status);
+CREATE UNIQUE INDEX uq_readings_evaluation_operation_id
+    ON readings(evaluation_operation_id)
+    WHERE evaluation_operation_id IS NOT NULL;
 CREATE INDEX idx_readings_user_status ON readings(user_id, status) WHERE deleted_at IS NULL;
 CREATE INDEX idx_readings_user_created_at ON readings(user_id, created_at) WHERE deleted_at IS NULL;
 
