@@ -1,8 +1,8 @@
 project: dolynation-site
-site_version: 0.1.2
-updated: '2026-11-21'
+site_version: 0.2.0
+updated: '2026-11-23'
 repositories:
   dolynation-tetl-landing:
-    version: 0.1.2
-    tag: v0.1.2
-    commit: e6bd0521c3f452c66d2aac6f4b1a1531137baa19
+    version: 0.2.0
+    tag: v0.2.0
+    commit: 7ccecb495d759ed80df2f8b990ec00e7098657ed
