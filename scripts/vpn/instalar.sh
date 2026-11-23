@@ -247,7 +247,7 @@ else
   done
 fi
 echo
-echo " Abre https://devweb.dolynation.app o https://devapi.dolynation.app en el navegador."
+echo " Abre https://devplay.dolynation.app o https://devapi.dolynation.app en el navegador."
 echo "=============================================="
 
 exit 0

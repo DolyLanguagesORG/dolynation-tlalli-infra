@@ -150,7 +150,7 @@ jobs:
             staging)
               project=doly-site-staging
               port=57023
-              app_base_url='https://stagingweb.dolynation.app'
+              app_base_url='https://stagingplay.dolynation.app'
               ;;
             rehearsal)
               project=doly-site-rehearsal
