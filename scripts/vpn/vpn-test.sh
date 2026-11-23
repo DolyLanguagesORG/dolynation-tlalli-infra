@@ -74,8 +74,8 @@ test_mtls() {
     if [ "$verify_mode" = "off" ]; then
       # Acceso directo con TLS publico (Let's Encrypt) sin certificado de cliente.
       code="$(curl -sS -o /dev/null -w '%{http_code}' \
-        --resolve "$peer.yacaterkos.tech:443:$ip" \
-        "https://$peer.yacaterkos.tech/api/v1/health/live" 2>/dev/null || echo 000)"
+        --resolve "$peer.dolynation.app:443:$ip" \
+        "https://$peer.dolynation.app/api/v1/health/live" 2>/dev/null || echo 000)"
       if [ "$code" = "200" ]; then
         ok "$peer responde con TLS valido y sin certificado de cliente (HTTP 200)"
       else
@@ -84,11 +84,11 @@ test_mtls() {
     else
       # Con certificado de cliente: la API responde.
       code="$(curl -sS -o /dev/null -w '%{http_code}' \
-        --resolve "$peer.yacaterkos.tech:443:$ip" \
+        --resolve "$peer.dolynation.app:443:$ip" \
         --cacert "$VPN_DIR/runtime/$peer/ca.crt" \
         --cert "$VPN_DIR/ca/certs/jxadevp-dev/chain.pem" \
         --key "$VPN_DIR/ca/certs/jxadevp-dev/key.pem" \
-        "https://$peer.yacaterkos.tech/api/v1/health/live" 2>/dev/null || echo 000)"
+        "https://$peer.dolynation.app/api/v1/health/live" 2>/dev/null || echo 000)"
       if [ "$code" = "200" ]; then
         ok "$peer responde con certificado de cliente (HTTP 200)"
       else
@@ -97,9 +97,9 @@ test_mtls() {
 
       # Sin certificado: el servidor lo rechaza.
       code="$(curl -sS -o /dev/null -w '%{http_code}' \
-        --resolve "$peer.yacaterkos.tech:443:$ip" \
+        --resolve "$peer.dolynation.app:443:$ip" \
         --cacert "$VPN_DIR/runtime/$peer/ca.crt" \
-        "https://$peer.yacaterkos.tech/api/v1/health/live" 2>/dev/null || echo 000)"
+        "https://$peer.dolynation.app/api/v1/health/live" 2>/dev/null || echo 000)"
       if [ "$code" = "400" ] || [ "$code" = "403" ]; then
         ok "$peer rechaza a quien no tiene certificado (HTTP $code)"
       else
@@ -118,8 +118,8 @@ test_mtls() {
   else
     local code
     code="$(curl -sS -o /dev/null -w '%{http_code}' \
-      --resolve "devsite.yacaterkos.tech:443:$site_ip" \
-      "https://devsite.yacaterkos.tech/" 2>/dev/null || echo 000)"
+      --resolve "devsite.dolynation.app:443:$site_ip" \
+      "https://devsite.dolynation.app/" 2>/dev/null || echo 000)"
     if [ "$code" = "200" ]; then
       ok "devsite responde con TLS valido y sin certificado de cliente (HTTP 200)"
     else
@@ -238,9 +238,9 @@ test_dns() {
   fi
 
   local par
-  for par in "devapi.yacaterkos.tech 10.90.0.2" \
-             "devweb.yacaterkos.tech 10.90.0.3" \
-             "devsite.yacaterkos.tech 10.90.0.5" \
+  for par in "devapi.dolynation.app 10.90.0.2" \
+             "devweb.dolynation.app 10.90.0.3" \
+             "devsite.dolynation.app 10.90.0.5" \
              "minios.doly.internal 10.90.0.4"; do
     set -- $par
     local nombre="$1" esperado="$2"

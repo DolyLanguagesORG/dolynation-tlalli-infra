@@ -169,25 +169,26 @@ fi
 echo
 echo "=== 5. dev (10.91.0.6) -> devapi por mTLS (HTTP) ==="
 code="$(ip netns exec $NS_DEV curl -sk -o /dev/null -w '%{http_code}' \
-  --resolve devapi.yacaterkos.tech:443:10.90.0.2 \
+  --resolve devapi.dolynation.app:443:10.90.0.2 \
   --cacert /etc/doly-vpn/runtime/devapi/ca.crt \
   --cert "/etc/doly-vpn/ca/certs/$PEER_DEV/chain.pem" \
   --key "/etc/doly-vpn/ca/certs/$PEER_DEV/key.pem" \
-  https://devapi.yacaterkos.tech/api/v1/health/live 2>/dev/null)"
+  https://devapi.dolynation.app/api/v1/health/live 2>/dev/null)"
 if [ "$code" = "200" ]; then ok "la API responde con el cert de la identidad dev"; else ko "la API devolvio HTTP $code"; fi
 
 echo
 echo "=== 6. el DNS de la VPN resuelve los servicios a su IP de tunel ==="
 # Sin esto, el navegador resolveria el nombre por internet y la peticion
 # saldria del servidor sin pasar por el tunel.
-for name in devapi.yacaterkos.tech devweb.yacaterkos.tech minios.doly.internal; do
+for name in devapi.dolynation.app devweb.dolynation.app devsite.dolynation.app minios.doly.internal; do
   ip netns exec $NS_DEV dig @10.90.0.1 +short "$name" 2>/dev/null | head -1
 done > "$T/dns.txt"
 
 if grep -q "^10.90.0.2$" "$T/dns.txt" &&
    grep -q "^10.90.0.3$" "$T/dns.txt" &&
+   grep -q "^10.90.0.5$" "$T/dns.txt" &&
    grep -q "^10.90.0.4$" "$T/dns.txt"; then
-  ok "los tres servicios resuelven a su IP de tunel"
+  ok "los cuatro servicios resuelven a su IP de tunel"
 else
   ko "el DNS no resuelve los servicios a sus IPs de tunel"
   sed 's/^/       /' "$T/dns.txt"
@@ -204,11 +205,11 @@ echo
 echo "=== 7. la peticion sale por el tunel (no por internet) ==="
 # Con el DNS de la VPN, el nombre apunta a 10.90.0.2 y elAllowedIPs del
 # peer mete ese trafico en el tunel.
-resolved="$(ip netns exec $NS_DEV dig @10.90.0.1 +short devapi.yacaterkos.tech 2>/dev/null | head -1)"
+resolved="$(ip netns exec $NS_DEV dig @10.90.0.1 +short devapi.dolynation.app 2>/dev/null | head -1)"
 if [ "$resolved" = "10.90.0.2" ]; then
-  ok "devapi.yacaterkos.tech -> 10.90.0.2 (la IP de tunel del peer)"
+  ok "devapi.dolynation.app -> 10.90.0.2 (la IP de tunel del peer)"
 else
-  ko "devapi.yacaterkos.tech resuelve a '$resolved', no a 10.90.0.2"
+  ko "devapi.dolynation.app resuelve a '$resolved', no a 10.90.0.2"
 fi
 
 # limpieza

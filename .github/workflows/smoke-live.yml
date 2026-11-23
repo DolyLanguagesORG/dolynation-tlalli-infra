@@ -26,9 +26,9 @@ on:
   workflow_dispatch:
     inputs:
       api:
-        description: 'URL base de la API de desarrollo'
+        description: 'URL base de la API (staging por defecto; devapi vive tras VPN)'
         required: false
-        default: 'https://devapi.yacaterkos.tech/api/v1'
+        default: 'https://stagingweb.dolynation.app/api/v1'
         type: string
 
 permissions:
@@ -49,7 +49,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Smoke live (una lectura contra el ambiente real)
-        run: bash scripts/smoke-live.sh "${{ inputs.api || 'https://devapi.yacaterkos.tech/api/v1' }}"
+        run: bash scripts/smoke-live.sh "${{ inputs.api || 'https://stagingweb.dolynation.app/api/v1' }}"
 
       - name: Resumen
         if: always()

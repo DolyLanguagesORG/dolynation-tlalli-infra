@@ -21,14 +21,14 @@
 #   bash scripts/deploy-site.sh
 set -euo pipefail
 
-ORG_DIR="${ORG_DIR:-/srv/doly}"
+ORG_DIR="${ORG_DIR:-/srv/doly/staging}"
 ENV_DIR="${ENV_DIR:-$ORG_DIR/$COMPOSE_PROJECT_NAME}"
 # El manifiesto DEL SITIO, no el de la aplicacion: la landing es un producto
 # aparte, con su propia linea de releases. Publicarla no toca ni una linea
 # del manifiesto de la app.
-MANIFEST="${MANIFEST:-$ORG_DIR/dolynation-tlalli-infra/versions-site.yml}"
-REGISTRY="${REGISTRY:-ghcr.io}"
 REPO_DIR="${REPO_DIR:-$ORG_DIR/dolynation-tlalli-infra}"
+MANIFEST="${MANIFEST:-$REPO_DIR/versions-site.yml}"
+REGISTRY="${REGISTRY:-ghcr.io/dolylanguagesorg}"
 
 log() { echo "[deploy-site] $*"; }
 
@@ -85,7 +85,9 @@ docker pull "$LANDING_IMAGE"
 # --- 5. Levantar SOLO el servicio de la landing ----------------------------
 cd "$REPO_DIR"
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:?falta COMPOSE_PROJECT_NAME}"
+export LANDING_HOST_PORT="${LANDING_HOST_PORT:-57023}"
 export LANDING_TAG
+export APP_BASE_URL="${APP_BASE_URL:-}"
 
 log "Levantando la landing de $COMPOSE_PROJECT_NAME"
 docker compose -f docker-compose.site.yml up -d --no-deps landing

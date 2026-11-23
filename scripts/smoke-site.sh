@@ -127,7 +127,20 @@ for cabecera in "x-content-type-options: nosniff" "x-frame-options: sameorigin";
   fi
 done
 
-# --- 8. La compresion ------------------------------------------------------
+# --- 8. La configuracion runtime por ambiente (/runtime-config.js) -----------
+RC_CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$SITE/runtime-config.js" 2>/dev/null || echo 000)"
+if [ "$RC_CODE" = "200" ]; then
+  RC_CACHE="$(curl -sI --max-time 15 "$SITE/runtime-config.js" 2>/dev/null | grep -i '^cache-control:' | head -1)"
+  if printf '%s' "$RC_CACHE" | grep -qi 'no-store'; then
+    ok "el runtime-config.js se sirve sin cache (no-store)"
+  else
+    ko "el runtime-config.js no lleva Cache-Control no-store" "recibido: ${RC_CACHE:-nada}"
+  fi
+else
+  echo "  AVISO /runtime-config.js devolvio HTTP $RC_CODE (version previa al soporte runtime)" >&2
+fi
+
+# --- 9. La compresion ------------------------------------------------------
 CODE="$(curl -s -o /dev/null -w '%{http_code} %{size_download}' --compressed --max-time 15 "$SITE/" 2>&1)"
 if [ "${CODE%% *}" = "200" ]; then
   ok "la pagina se sirve comprimida" "$(printf '%s' "$CODE" | awk '{print $2}') bytes"
