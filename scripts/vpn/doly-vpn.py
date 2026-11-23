@@ -96,9 +96,9 @@ PERSONAS_DUALES = {
 }
 
 SERVICE_NAMES = {
-    "devapi": "devapi.yacaterkos.tech",
-    "devweb": "devweb.yacaterkos.tech",
-    "devsite": "devsite.yacaterkos.tech",
+    "devapi": "devapi.dolynation.app",
+    "devweb": "devweb.dolynation.app",
+    "devsite": "devsite.dolynation.app",
     "minios": "minios.doly.internal",
 }
 
@@ -530,10 +530,10 @@ Que necesitas
 Solo necesitas **1 archivo**: tu configuracion de WireGuard (`wg0.conf`,
 o `wg-dev.conf` si tienes dos identidades).
 
-`devweb.yacaterkos.tech` y `devapi.yacaterkos.tech` usan HTTPS real con
-certificado de Let's Encrypt y no exigen certificado de cliente en el
-navegador: **no hace falta instalar `ca.crt` ni importar `.p12`** para
-desarrollar.
+`devweb.dolynation.app`, `devapi.dolynation.app` y `devsite.dolynation.app`
+usan HTTPS real con certificado de Let's Encrypt y no exigen certificado
+de cliente en el navegador: **no hace falta instalar `ca.crt` ni importar
+`.p12`** para desarrollar.
 
 1. Instalar WireGuard (https://www.wireguard.com/install/).
 
@@ -545,8 +545,8 @@ desarrollar.
      archivo una vez (`nmcli connection import type wireguard file wg-dev.conf`)
      o usa el metodo por terminal abajo.
 
-3. Abrir https://devweb.yacaterkos.tech o https://devapi.yacaterkos.tech
-   y listo.
+3. Abrir https://devweb.dolynation.app, https://devapi.dolynation.app o
+   https://devsite.dolynation.app y listo.
 
 Como conectarse y desconectarse en Linux
 ----------------------------------------
@@ -562,7 +562,7 @@ apagas desde el icono/menu de red del panel o con:
   nmcli connection show           # ver las conexiones
 
 Con una sola identidad el nombre sera `wg0`. Si tu sistema usa
-`systemd-resolved` y al conectar `devapi.yacaterkos.tech` no resuelve a
+`systemd-resolved` y al conectar `devapi.dolynation.app` no resuelve a
 `10.90.0.2`, anade `/etc/NetworkManager/conf.d/00-dns.conf`:
 
   [main]
@@ -588,8 +588,9 @@ El DNS
 No hay que configurar nada. Los nombres de los servicios ya resuelven a
 la IP DE TUNEL:
 
-  devapi.yacaterkos.tech  ->  10.90.0.2
-  devweb.yacaterkos.tech  ->  10.90.0.3
+  devapi.dolynation.app   ->  10.90.0.2
+  devweb.dolynation.app   ->  10.90.0.3
+  devsite.dolynation.app  ->  10.90.0.5
   minios.doly.internal    ->  10.90.0.4
 
 Esos registros estan en el DNS publico, pero apuntan a una IP privada
@@ -602,7 +603,7 @@ que solo se alcanza por el tunel. Por eso:
 
 Comprobacion:
 
-  dig +short devapi.yacaterkos.tech    # 10.90.0.2
+  dig +short devapi.dolynation.app     # 10.90.0.2
   ping -c1 10.90.0.2                   # responde con la VPN puesta
 
 Que son las identidades
@@ -624,8 +625,9 @@ Direcciones utiles (resuelven a la IP de tunel dentro de la VPN)
   {dns}
 
 El ambiente de desarrollo se alcanza en:
-  https://devweb.yacaterkos.tech     (web)
-  https://devapi.yacaterkos.tech     (API)
+  https://devweb.dolynation.app      (web)
+  https://devapi.dolynation.app      (API)
+  https://devsite.dolynation.app     (landing)
   https://minios.doly.internal:50090 (almacenamiento de objetos)
 
 Opcional — solo si entras directo a MinIO (`minios.doly.internal:50090`)
@@ -704,10 +706,11 @@ def bundles_build(only=None):
                 "(identidad: {peer}).\n"
                 "# Generada por doly-vpn.py. Privada: no la compartas.\n"
                 "#\n"
-                "# Los nombres de los servicios (devapi.yacaterkos.tech,\n"
-                "# devweb.yacaterkos.tech) resuelven YA a la IP de tunel\n"
-                "# (10.90.0.2 y 10.90.0.3) en el DNS publico. Por eso este\n"
-                "# config no necesita linea DNS: el nombre se resuelve solo y\n"
+                "# Los nombres de los servicios (devapi.dolynation.app,\n"
+                "# devweb.dolynation.app, devsite.dolynation.app) resuelven\n"
+                "# YA a la IP de tunel (10.90.0.2, 10.90.0.3 y 10.90.0.5) en\n"
+                "# el DNS publico y de la VPN. Por eso este config no necesita\n"
+                "# linea DNS: el nombre se resuelve solo y\n"
                 "# el trafico entra por el tunel porque la IP esta en el\n"
                 "# AllowedIPs de mas abajo.\n"
                 "#\n"

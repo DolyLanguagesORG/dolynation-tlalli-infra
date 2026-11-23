@@ -33,6 +33,7 @@ services:
     restart: unless-stopped
     environment:
       TZ: ${TZ:-America/Mexico_City}
+      APP_BASE_URL: ${APP_BASE_URL:-}
     ports:
       # Solo local: lo consume el proxy de este servidor. Publicarlo en
       # 0.0.0.0 dejaria el sitio accesible desde internet sin TLS.

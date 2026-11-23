@@ -27,7 +27,7 @@ habla TLS con el origen**, y el certificado de origen no sale del servidor.
 
 | Fichero | Qué es |
 | --- | --- |
-| `dolynation.conf` | Los vhosts de `devweb` y `devapi` |
+| `dolynation.conf` | Los vhosts públicos de `staging` (`staging`, `stagingweb`) y `prod` (`dolynation.app`, `www`, `play`). Desarrollo vive en la VPN |
 
 ## Instalación
 
@@ -35,9 +35,9 @@ habla TLS con el origen**, y el certificado de origen no sale del servidor.
 # 1. Certificados (el CSR se genera en el servidor; la clave privada nunca sale)
 sudo mkdir -p /etc/ssl/dolynation
 sudo openssl req -new -newkey rsa:2048 -nodes \
-  -keyout /tmp/origin.key -out /etc/ssl/dolynation/origin.csr \
-  -subj "/CN=devweb.yacaterkos.tech" \
-  -addext "subjectAltName=DNS:devweb.yacaterkos.tech,DNS:devapi.yacaterkos.tech"
+  -keyout /etc/ssl/dolynation/origin.key -out /etc/ssl/dolynation/origin.csr \
+  -subj "/CN=dolynation.app" \
+  -addext "subjectAltName=DNS:dolynation.app,DNS:*.dolynation.app"
 
 # 2. En el panel de Cloudflare: SSL/TLS > Origin Server > Create Certificate
 #    (pegar el CSR, tipo RSA, validez 15 anos). Guardar el .pem como:
@@ -63,17 +63,19 @@ Los puertos `57010`-`57012` **no se abren**: solo escuchan en `127.0.0.1`.
 
 ## Nota sobre el DNS
 
-Los registros DNS de `devweb` y `devapi` deben apuntar a la IP del servidor
-con la **nube naranja** (proxied). Con la nube gris, el certificado de origen
-no se usa y el navegador negotiate TLS directamente contra el servidor.
+Los registros DNS públicos (`dolynation.app`, `www`, `play`, `staging`,
+`stagingweb`) deben apuntar a la IP del servidor con la **nube naranja**
+(proxied). Con la nube gris, el certificado de origen no se usa y el navegador
+negocia TLS directamente contra el servidor.
 
-Para staging y producción se replica esta configuración cambiando los
-dominios y los puertos de los `upstream`.
+Los tres subdominios de desarrollo (`devweb`, `devapi`, `devsite`) son
+**solo por VPN** (`10.90.0.2/3/5`), llevan **nube gris** (DNS Only, sin `AAAA`)
+y usan TLS de Let's Encrypt dentro de sus contenedores peer.
 
 ## Cambiar el dominio público
 
 El `server_name` de esta configuración es el **único lugar del código** donde
-aparece el dominio público. El frontend no lo conoce: su
+aparece el dominio público de staging y producción. El frontend no lo conoce: su
 `BACKEND_INTERNAL_URL` es interno en los 4 ambientes
 (`http://backend:3333/api/v1`, por la red de compose).
 
@@ -81,7 +83,7 @@ Al cambiar el dominio hay que tocar **3 cosas**, y solo una es este archivo:
 
 | # | Dónde | Qué | ¿Requiere código? |
 | --- | --- | --- | --- |
-| 1 | **este archivo** (`server_name`) | el ruteo de `devweb` / `devapi` / `stagingweb` | **Sí** |
+| 1 | **este archivo** (`server_name`) | el ruteo de `stagingweb` / `staging` / `play` / `dolynation.app` | **Sí** |
 | 2 | `NEXT_ALLOWED_DEV_ORIGINS` (variable del environment `desarrollo` de `dolynation-tonatiuh-front`) | el websocket de HMR | **No** |
 | 3 | `FRONTEND_BASE_URL` (variable del environment correspondiente de `dolynation-atl-back`) | los enlaces de los correos transaccionales | **No** |
 
@@ -90,9 +92,9 @@ Al cambiar el dominio hay que tocar **3 cosas**, y solo una es este archivo:
 2. **Este archivo** → `server_name` del host nuevo (y `upstream` si cambian los
    puertos). PR a `develop` y el deploy.
 3. **`NEXT_ALLOWED_DEV_ORIGINS`** → el patrón del dominio nuevo. Admite
-   comodines: `**.yacaterkos.tech` matchea cualquier subdominio (no el apex).
+   comodines: `**.dolynation.app` matchea cualquier subdominio (no el apex).
    Redeploy del frontend.
-4. **`FRONTEND_BASE_URL`** → la URL pública nueva. Redeploy del backend.
+4. **`FRONTEND_BASE_URL`** → la URL pública nueva (y actualizar OAuth / Turnstile / Stripe). Redeploy del backend.
 
 > La variable 2 solo aplica al **dev server**: en rehearsal, staging y
 > producción la app corre compilada (`output: 'standalone'`), sin HMR y sin

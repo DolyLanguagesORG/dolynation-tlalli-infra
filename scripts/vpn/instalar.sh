@@ -169,7 +169,7 @@ conectar() {
         fi
         # El dominio "~." hace que TODAS las consultas vayan al DNS de la
         # VPN. Sin el, el resolved sigue preguntando al DNS global y
-        # `devapi.yacaterkos.tech` no resuelve a la IP de tunel.
+        # `devapi.dolynation.app` no resuelve a la IP de tunel.
         nmcli connection modify "$base" ipv4.dns-priority -50 ipv4.dns-search "~." \
           >/dev/null 2>&1
       fi
@@ -193,7 +193,7 @@ conectar() {
 }
 
 comprobar_dns() {
-  getent ahostsv4 devapi.yacaterkos.tech 2>/dev/null | head -1 | awk '{print $1}'
+  getent ahostsv4 devapi.dolynation.app 2>/dev/null | head -1 | awk '{print $1}'
 }
 
 conectar
@@ -216,7 +216,7 @@ echo
 if [ "$RESUELTO" = "10.90.0.2" ]; then
   info "el DNS resuelve devapi a 10.90.0.2 (correcto)"
 else
-  aviso "devapi.yacaterkos.tech resuelve a '${RESUELTO:-nada}' (se espera 10.90.0.2)"
+  aviso "devapi.dolynation.app resuelve a '${RESUELTO:-nada}' (se espera 10.90.0.2)"
   fallos=$((fallos+1))
 fi
 
@@ -247,7 +247,7 @@ else
   done
 fi
 echo
-echo " Abre https://devapi.yacaterkos.tech en el navegador."
+echo " Abre https://devweb.dolynation.app o https://devapi.dolynation.app en el navegador."
 echo "=============================================="
 
 exit 0
