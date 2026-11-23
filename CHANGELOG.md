@@ -11,6 +11,13 @@ un PR de release contra `develop` que sube la versión y escribe esta sección; 
 mergearlo se crean el tag anotado y la GitHub Release. Ver
 [`conventions/versioning.md`](https://github.com/DolyLanguagesORG/dolynation-ehecatl-docs/blob/develop/conventions/versioning.md).
 
+## [0.18.0](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.17.0...v0.18.0) (2026-11-22)
+
+
+### Features
+
+* **infra:** agrega variables turnstile, cors y real ip de cloudflare en nginx ([#265](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/265)) ([0067b4b](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/0067b4b8b3e7b9d636adb5983d0e0f315f241a57))
+
 ## [0.17.0](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.16.1...v0.17.0) (2026-11-22)
 
 
