@@ -7,9 +7,9 @@ repositories:
     tag: v0.14.0
     commit: dae17ae949cf26f4800e8c2f4b42e872992c4e29
   dolynation-tonatiuh-front:
-    version: 0.12.0
-    tag: v0.12.0
-    commit: b2f62c163347afabc09e8b3d990b66ba064e74e8
+    version: 0.13.0
+    tag: v0.13.0
+    commit: c3b957f727d0c5a805a32a7f383c35ef10a6495c
   dolynation-tlalli-infra:
     version: 0.19.0
     tag: v0.19.0
