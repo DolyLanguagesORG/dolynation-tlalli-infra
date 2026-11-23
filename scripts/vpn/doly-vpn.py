@@ -97,8 +97,8 @@ PERSONAS_DUALES = {
 
 SERVICE_NAMES = {
     "devapi": "devapi.dolynation.app",
-    "devweb": "devweb.dolynation.app",
-    "devsite": "devsite.dolynation.app",
+    "devweb": "devplay.dolynation.app",
+    "devsite": "dev.dolynation.app",
     "minios": "minios.doly.internal",
 }
 
@@ -530,7 +530,7 @@ Que necesitas
 Solo necesitas **1 archivo**: tu configuracion de WireGuard (`wg0.conf`,
 o `wg-dev.conf` si tienes dos identidades).
 
-`devweb.dolynation.app`, `devapi.dolynation.app` y `devsite.dolynation.app`
+`devplay.dolynation.app`, `devapi.dolynation.app` y `dev.dolynation.app`
 usan HTTPS real con certificado de Let's Encrypt y no exigen certificado
 de cliente en el navegador: **no hace falta instalar `ca.crt` ni importar
 `.p12`** para desarrollar.
@@ -545,8 +545,8 @@ de cliente en el navegador: **no hace falta instalar `ca.crt` ni importar
      archivo una vez (`nmcli connection import type wireguard file wg-dev.conf`)
      o usa el metodo por terminal abajo.
 
-3. Abrir https://devweb.dolynation.app, https://devapi.dolynation.app o
-   https://devsite.dolynation.app y listo.
+3. Abrir https://devplay.dolynation.app, https://devapi.dolynation.app o
+   https://dev.dolynation.app y listo.
 
 Como conectarse y desconectarse en Linux
 ----------------------------------------
@@ -589,8 +589,8 @@ No hay que configurar nada. Los nombres de los servicios ya resuelven a
 la IP DE TUNEL:
 
   devapi.dolynation.app   ->  10.90.0.2
-  devweb.dolynation.app   ->  10.90.0.3
-  devsite.dolynation.app  ->  10.90.0.5
+  devplay.dolynation.app  ->  10.90.0.3
+  dev.dolynation.app      ->  10.90.0.5
   minios.doly.internal    ->  10.90.0.4
 
 Esos registros estan en el DNS publico, pero apuntan a una IP privada
@@ -625,9 +625,9 @@ Direcciones utiles (resuelven a la IP de tunel dentro de la VPN)
   {dns}
 
 El ambiente de desarrollo se alcanza en:
-  https://devweb.dolynation.app      (web)
+  https://devplay.dolynation.app     (web)
   https://devapi.dolynation.app      (API)
-  https://devsite.dolynation.app     (landing)
+  https://dev.dolynation.app         (landing)
   https://minios.doly.internal:50090 (almacenamiento de objetos)
 
 Opcional — solo si entras directo a MinIO (`minios.doly.internal:50090`)
@@ -707,7 +707,7 @@ def bundles_build(only=None):
                 "# Generada por doly-vpn.py. Privada: no la compartas.\n"
                 "#\n"
                 "# Los nombres de los servicios (devapi.dolynation.app,\n"
-                "# devweb.dolynation.app, devsite.dolynation.app) resuelven\n"
+                "# devplay.dolynation.app, dev.dolynation.app) resuelven\n"
                 "# YA a la IP de tunel (10.90.0.2, 10.90.0.3 y 10.90.0.5) en\n"
                 "# el DNS publico y de la VPN. Por eso este config no necesita\n"
                 "# linea DNS: el nombre se resuelve solo y\n"

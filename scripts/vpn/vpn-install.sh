@@ -82,8 +82,8 @@ systemctl start doly-vpn-refresh.timer >/dev/null 2>&1 || true
 # --- El resolutor DNS de la VPN ---------------------------------------------
 # El hub resuelve los nombres de los servicios a sus IPs de tunel:
 #   devapi.dolynation.app  -> 10.90.0.2
-#   devweb.dolynation.app  -> 10.90.0.3
-#   devsite.dolynation.app -> 10.90.0.5
+#   devplay.dolynation.app -> 10.90.0.3
+#   dev.dolynation.app     -> 10.90.0.5
 #   minios.doly.internal   -> 10.90.0.4
 # El resto de nombres se resuelven como siempre.
 #

@@ -67,6 +67,13 @@ test_mtls() {
       continue
     fi
 
+    local host
+    case "$peer" in
+      devapi) host="devapi.dolynation.app" ;;
+      devweb) host="devplay.dolynation.app" ;;
+      *)      host="$peer.dolynation.app" ;;
+    esac
+
     local verify_mode code
     verify_mode="$(docker exec "doly-vpn-$peer" grep -E '^\s*ssl_verify_client\s+' /etc/nginx/nginx.conf 2>/dev/null \
       | awk '{gsub(";", "", $2); print $2}' | head -1 || true)"
@@ -74,43 +81,43 @@ test_mtls() {
     if [ "$verify_mode" = "off" ]; then
       # Acceso directo con TLS publico (Let's Encrypt) sin certificado de cliente.
       code="$(curl -sS -o /dev/null -w '%{http_code}' \
-        --resolve "$peer.dolynation.app:443:$ip" \
-        "https://$peer.dolynation.app/api/v1/health/live" 2>/dev/null || echo 000)"
+        --resolve "$host:443:$ip" \
+        "https://$host/api/v1/health/live" 2>/dev/null || echo 000)"
       if [ "$code" = "200" ]; then
-        ok "$peer responde con TLS valido y sin certificado de cliente (HTTP 200)"
+        ok "$peer ($host) responde con TLS valido y sin certificado de cliente (HTTP 200)"
       else
-        ko "$peer sin certificado de cliente devolvio HTTP $code (se esperaba 200)"
+        ko "$peer ($host) sin certificado de cliente devolvio HTTP $code (se esperaba 200)"
       fi
     else
       # Con certificado de cliente: la API responde.
       code="$(curl -sS -o /dev/null -w '%{http_code}' \
-        --resolve "$peer.dolynation.app:443:$ip" \
+        --resolve "$host:443:$ip" \
         --cacert "$VPN_DIR/runtime/$peer/ca.crt" \
         --cert "$VPN_DIR/ca/certs/jxadevp-dev/chain.pem" \
         --key "$VPN_DIR/ca/certs/jxadevp-dev/key.pem" \
-        "https://$peer.dolynation.app/api/v1/health/live" 2>/dev/null || echo 000)"
+        "https://$host/api/v1/health/live" 2>/dev/null || echo 000)"
       if [ "$code" = "200" ]; then
-        ok "$peer responde con certificado de cliente (HTTP 200)"
+        ok "$peer ($host) responde con certificado de cliente (HTTP 200)"
       else
-        ko "$peer con certificado de cliente devolvio HTTP $code"
+        ko "$peer ($host) con certificado de cliente devolvio HTTP $code"
       fi
 
       # Sin certificado: el servidor lo rechaza.
       code="$(curl -sS -o /dev/null -w '%{http_code}' \
-        --resolve "$peer.dolynation.app:443:$ip" \
+        --resolve "$host:443:$ip" \
         --cacert "$VPN_DIR/runtime/$peer/ca.crt" \
-        "https://$peer.dolynation.app/api/v1/health/live" 2>/dev/null || echo 000)"
+        "https://$host/api/v1/health/live" 2>/dev/null || echo 000)"
       if [ "$code" = "400" ] || [ "$code" = "403" ]; then
-        ok "$peer rechaza a quien no tiene certificado (HTTP $code)"
+        ok "$peer ($host) rechaza a quien no tiene certificado (HTTP $code)"
       else
-        ko "$peer sin certificado devolvio HTTP $code (deberia rechazar)"
+        ko "$peer ($host) sin certificado devolvio HTTP $code (deberia rechazar)"
       fi
     fi
   done
 
-  # La landing (devsite) no es una API: su raiz es la pagina. Se comprueba
-  # aparte, con el mismo TLS real (Let's Encrypt) y sin certificado de
-  # cliente: se abre en el navegador desde dentro de la VPN.
+  # La landing (devsite -> dev.dolynation.app) no es una API: su raiz es la pagina.
+  # Se comprueba aparte, con el mismo TLS real (Let's Encrypt) y sin certificado
+  # de cliente: se abre en el navegador desde dentro de la VPN.
   local site_ip
   site_ip="$(cat "$VPN_DIR/runtime/devsite/meta.ip" 2>/dev/null || echo "")"
   if [ -z "$site_ip" ]; then
@@ -118,12 +125,12 @@ test_mtls() {
   else
     local code
     code="$(curl -sS -o /dev/null -w '%{http_code}' \
-      --resolve "devsite.dolynation.app:443:$site_ip" \
-      "https://devsite.dolynation.app/" 2>/dev/null || echo 000)"
+      --resolve "dev.dolynation.app:443:$site_ip" \
+      "https://dev.dolynation.app/" 2>/dev/null || echo 000)"
     if [ "$code" = "200" ]; then
-      ok "devsite responde con TLS valido y sin certificado de cliente (HTTP 200)"
+      ok "devsite (dev.dolynation.app) responde con TLS valido y sin certificado de cliente (HTTP 200)"
     else
-      ko "devsite devolvio HTTP $code (se esperaba 200)"
+      ko "devsite (dev.dolynation.app) devolvio HTTP $code (se esperaba 200)"
     fi
   fi
 }
@@ -239,8 +246,8 @@ test_dns() {
 
   local par
   for par in "devapi.dolynation.app 10.90.0.2" \
-             "devweb.dolynation.app 10.90.0.3" \
-             "devsite.dolynation.app 10.90.0.5" \
+             "devplay.dolynation.app 10.90.0.3" \
+             "dev.dolynation.app 10.90.0.5" \
              "minios.doly.internal 10.90.0.4"; do
     set -- $par
     local nombre="$1" esperado="$2"

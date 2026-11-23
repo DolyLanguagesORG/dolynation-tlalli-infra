@@ -180,7 +180,7 @@ echo
 echo "=== 6. el DNS de la VPN resuelve los servicios a su IP de tunel ==="
 # Sin esto, el navegador resolveria el nombre por internet y la peticion
 # saldria del servidor sin pasar por el tunel.
-for name in devapi.dolynation.app devweb.dolynation.app devsite.dolynation.app minios.doly.internal; do
+for name in devapi.dolynation.app devplay.dolynation.app dev.dolynation.app minios.doly.internal; do
   ip netns exec $NS_DEV dig @10.90.0.1 +short "$name" 2>/dev/null | head -1
 done > "$T/dns.txt"
 

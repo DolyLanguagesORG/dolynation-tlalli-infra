@@ -27,7 +27,7 @@ habla TLS con el origen**, y el certificado de origen no sale del servidor.
 
 | Fichero | Qué es |
 | --- | --- |
-| `dolynation.conf` | Los vhosts públicos de `staging` (`staging`, `stagingweb`) y `prod` (`dolynation.app`, `www`, `play`). Desarrollo vive en la VPN |
+| `dolynation.conf` | Los vhosts públicos de `staging` (`staging`, `stagingplay`) y `prod` (`dolynation.app`, `www`, `play`). Desarrollo vive en la VPN |
 
 ## Instalación
 
@@ -64,11 +64,11 @@ Los puertos `57010`-`57012` **no se abren**: solo escuchan en `127.0.0.1`.
 ## Nota sobre el DNS
 
 Los registros DNS públicos (`dolynation.app`, `www`, `play`, `staging`,
-`stagingweb`) deben apuntar a la IP del servidor con la **nube naranja**
+`stagingplay`) deben apuntar a la IP del servidor con la **nube naranja**
 (proxied). Con la nube gris, el certificado de origen no se usa y el navegador
 negocia TLS directamente contra el servidor.
 
-Los tres subdominios de desarrollo (`devweb`, `devapi`, `devsite`) son
+Los tres subdominios de desarrollo (`devplay`, `devapi`, `dev`) son
 **solo por VPN** (`10.90.0.2/3/5`), llevan **nube gris** (DNS Only, sin `AAAA`)
 y usan TLS de Let's Encrypt dentro de sus contenedores peer.
 
@@ -83,7 +83,7 @@ Al cambiar el dominio hay que tocar **3 cosas**, y solo una es este archivo:
 
 | # | Dónde | Qué | ¿Requiere código? |
 | --- | --- | --- | --- |
-| 1 | **este archivo** (`server_name`) | el ruteo de `stagingweb` / `staging` / `play` / `dolynation.app` | **Sí** |
+| 1 | **este archivo** (`server_name`) | el ruteo de `stagingplay` / `staging` / `play` / `dolynation.app` | **Sí** |
 | 2 | `NEXT_ALLOWED_DEV_ORIGINS` (variable del environment `desarrollo` de `dolynation-tonatiuh-front`) | el websocket de HMR | **No** |
 | 3 | `FRONTEND_BASE_URL` (variable del environment correspondiente de `dolynation-atl-back`) | los enlaces de los correos transaccionales | **No** |
 
