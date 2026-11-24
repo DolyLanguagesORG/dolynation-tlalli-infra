@@ -11,7 +11,7 @@ repositories:
     tag: v0.16.0
     commit: 2650788e10943e398a3f75e96f559b2cc22b7664
   dolynation-tlalli-infra:
-    version: 0.20.0
+    version: 0.20.1
     tag: v0.20.0
     commit: 547d975d482ea09baa1f7936aaadb7260d44f080
   dolynation-ehecatl-docs:
