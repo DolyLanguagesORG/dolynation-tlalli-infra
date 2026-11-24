@@ -19,10 +19,12 @@ on:
   pull_request:
     paths:
       - 'versions.yml'
+      - 'versions-site.yml'
   push:
     branches: [develop]
     paths:
       - 'versions.yml'
+      - 'versions-site.yml'
   workflow_dispatch:
 
 permissions:
