@@ -112,7 +112,7 @@ jobs:
         run: |
           # El backend mapea estas tablas con Drizzle: si el schema no las
           # tiene, la app arranca y revienta al primer query.
-          expected="roles users user_oauth_accounts user_settings auth_access_tokens auth_email_tokens access_requests readings reading_explanations prompt_logs moderated_categories category_daily_usage audit_logs error_logs billing_subscriptions billing_payments billing_webhook_events"
+          expected="roles users user_oauth_accounts user_settings auth_access_tokens auth_email_tokens access_requests readings friendships friend_invite_links user_blocks friend_streaks friend_streak_days reading_explanations prompt_logs moderated_categories category_daily_usage audit_logs error_logs billing_subscriptions billing_payments billing_webhook_events"
           for t in $expected; do
             if ! psql -qtA -v ON_ERROR_STOP=1 -h localhost -U postgres -d dolynglish \
               -c "select 1 from pg_tables where tablename = '$t'" | grep -q 1; then
@@ -120,7 +120,7 @@ jobs:
               exit 1
             fi
           done
-          echo "Las $expected tablas estan."
+          echo "Las 22 tablas esperadas estan."
 
 
   # El runner del schema (`scripts/apply-schema.sh`) es lo que ejecuta cada

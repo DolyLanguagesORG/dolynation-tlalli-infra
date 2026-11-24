@@ -216,6 +216,8 @@ jobs:
           CAPTCHA_ALLOWED_HOSTNAMES: ${{ vars.CAPTCHA_ALLOWED_HOSTNAMES }}
           CAPTCHA_FAIL_OPEN: ${{ vars.CAPTCHA_FAIL_OPEN }}
           CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+          FRIEND_STREAK_CRON_ENABLED: ${{ vars.FRIEND_STREAK_CRON_ENABLED || 'true' }}
+          FRIEND_STREAK_CRON_EXPRESSION: ${{ vars.FRIEND_STREAK_CRON_EXPRESSION || '0 6 * * *' }}
         run: |
           set -euo pipefail
 
@@ -255,6 +257,13 @@ jobs:
             "$CAPTCHA_PROVIDER" "$CAPTCHA_SITE_KEY" "$CAPTCHA_SECRET_KEY" \
             "$CAPTCHA_APPEARANCE" "$CAPTCHA_ALLOWED_HOSTNAMES" "$CAPTCHA_FAIL_OPEN" \
             "$CORS_ALLOWED_ORIGINS" | base64 -w0)"
+          CONTENT="$(
+            {
+              printf '%s' "$CONTENT" | base64 -d
+              printf 'FRIEND_STREAK_CRON_ENABLED=%s\nFRIEND_STREAK_CRON_EXPRESSION=%s\n' \
+                "$FRIEND_STREAK_CRON_ENABLED" "$FRIEND_STREAK_CRON_EXPRESSION"
+            } | base64 -w0
+          )"
 
           echo "$CONTENT" | ssh -i ~/.ssh/deploy_key \
             -p "${{ secrets.DEPLOY_PORT }}" \

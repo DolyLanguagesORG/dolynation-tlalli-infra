@@ -114,6 +114,8 @@ jobs:
           POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          FRIEND_STREAK_CRON_ENABLED: ${{ vars.FRIEND_STREAK_CRON_ENABLED || 'true' }}
+          FRIEND_STREAK_CRON_EXPRESSION: ${{ vars.FRIEND_STREAK_CRON_EXPRESSION || '0 6 * * *' }}
         run: |
           set -euo pipefail
           # El agente SSH se creo en el paso anterior, en otro shell: hay que
@@ -124,8 +126,9 @@ jobs:
             export SSH_ASKPASS_REQUIRE=force
             export DISPLAY=:0
           fi
-          CONTENT="$(printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\n' \
-            "$POSTGRES_USER" "$POSTGRES_PASSWORD" "$POSTGRES_DB" | base64 -w0)"
+          CONTENT="$(printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\nFRIEND_STREAK_CRON_ENABLED=%s\nFRIEND_STREAK_CRON_EXPRESSION=%s\n' \
+            "$POSTGRES_USER" "$POSTGRES_PASSWORD" "$POSTGRES_DB" \
+            "$FRIEND_STREAK_CRON_ENABLED" "$FRIEND_STREAK_CRON_EXPRESSION" | base64 -w0)"
           echo "$CONTENT" | ssh -i ~/.ssh/deploy_key \
             -p "${{ secrets.DEPLOY_PORT }}" \
             -o StrictHostKeyChecking=accept-new -o BatchMode=yes \

@@ -145,6 +145,10 @@ CREATE INDEX idx_auth_email_tokens_user_type ON auth_email_tokens(user_id, type)
 CREATE TABLE readings (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    origin_type VARCHAR(20) NOT NULL DEFAULT 'personal'
+        CHECK (origin_type IN ('personal', 'friend_copy', 'friend_streak')),
+    source_reading_id INTEGER REFERENCES readings(id) ON DELETE SET NULL,
+    friend_streak_day_id INTEGER,
     title VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
     content TEXT NOT NULL,
@@ -176,6 +180,126 @@ CREATE UNIQUE INDEX uq_readings_evaluation_operation_id
     WHERE evaluation_operation_id IS NOT NULL;
 CREATE INDEX idx_readings_user_status ON readings(user_id, status) WHERE deleted_at IS NULL;
 CREATE INDEX idx_readings_user_created_at ON readings(user_id, created_at) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX uq_readings_user_source_reading
+    ON readings(user_id, source_reading_id)
+    WHERE source_reading_id IS NOT NULL AND deleted_at IS NULL;
+CREATE INDEX idx_readings_user_origin_created
+    ON readings(user_id, origin_type, created_at);
+
+-- Solicitudes y relaciones de amistad.
+CREATE TABLE friendships (
+    id SERIAL PRIMARY KEY,
+    requester_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    addressee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'accepted', 'rejected', 'cancelled')),
+    origin VARCHAR(20) NOT NULL DEFAULT 'email'
+        CHECK (origin IN ('email', 'invite_link')),
+    responded_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (requester_id <> addressee_id)
+);
+
+CREATE UNIQUE INDEX uq_friendships_active_pair
+    ON friendships (
+        LEAST(requester_id, addressee_id),
+        GREATEST(requester_id, addressee_id)
+    )
+    WHERE status IN ('pending', 'accepted');
+CREATE INDEX idx_friendships_requester_id ON friendships(requester_id);
+CREATE INDEX idx_friendships_addressee_id ON friendships(addressee_id);
+CREATE INDEX idx_friendships_status ON friendships(status);
+
+-- Tokens compartibles: se persiste el hash, nunca el token en claro.
+CREATE TABLE friend_invite_links (
+    id SERIAL PRIMARY KEY,
+    creator_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash VARCHAR(64) NOT NULL UNIQUE,
+    max_uses INTEGER DEFAULT 1,
+    uses_count INTEGER NOT NULL DEFAULT 0,
+    expires_at TIMESTAMP NOT NULL,
+    revoked_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (max_uses IS NULL OR max_uses >= 1),
+    CHECK (uses_count >= 0)
+);
+
+CREATE INDEX idx_friend_invite_links_creator_user_id
+    ON friend_invite_links(creator_user_id);
+CREATE INDEX idx_friend_invite_links_expires_at
+    ON friend_invite_links(expires_at);
+
+-- Bloqueos unidireccionales entre usuarios.
+CREATE TABLE user_blocks (
+    id SERIAL PRIMARY KEY,
+    blocker_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    blocked_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (blocker_id <> blocked_id),
+    UNIQUE (blocker_id, blocked_id)
+);
+
+CREATE INDEX idx_user_blocks_blocker_id ON user_blocks(blocker_id);
+CREATE INDEX idx_user_blocks_blocked_id ON user_blocks(blocked_id);
+
+-- Configuracion de una racha compartida entre dos amigos.
+CREATE TABLE friend_streaks (
+    id SERIAL PRIMARY KEY,
+    friendship_id INTEGER NOT NULL REFERENCES friendships(id) ON DELETE CASCADE,
+    user_low_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_high_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    initiated_by_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending_partner'
+        CHECK (status IN ('pending_partner', 'active', 'paused', 'ended')),
+    user_low_categories JSONB NOT NULL DEFAULT '[]'::jsonb,
+    user_high_categories JSONB NOT NULL DEFAULT '[]'::jsonb,
+    language VARCHAR(10) NOT NULL CHECK (language IN ('es', 'en', 'fr', 'it')),
+    difficulty VARCHAR(20) NOT NULL DEFAULT 'medium'
+        CHECK (difficulty IN ('easy', 'medium', 'hard')),
+    size VARCHAR(20) NOT NULL DEFAULT 'medium'
+        CHECK (size IN ('short', 'medium', 'long')),
+    current_streak INTEGER NOT NULL DEFAULT 0,
+    longest_streak INTEGER NOT NULL DEFAULT 0,
+    last_completed_date DATE,
+    started_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (user_low_id < user_high_id)
+);
+
+CREATE UNIQUE INDEX uq_friend_streaks_active_pair
+    ON friend_streaks(user_low_id, user_high_id)
+    WHERE status IN ('pending_partner', 'active', 'paused');
+CREATE INDEX idx_friend_streaks_friendship_id ON friend_streaks(friendship_id);
+CREATE INDEX idx_friend_streaks_status ON friend_streaks(status);
+
+-- Dia generado para una racha; cada usuario tiene una lectura independiente.
+CREATE TABLE friend_streak_days (
+    id SERIAL PRIMARY KEY,
+    streak_id INTEGER NOT NULL REFERENCES friend_streaks(id) ON DELETE CASCADE,
+    streak_date DATE NOT NULL,
+    selected_category VARCHAR(100) NOT NULL,
+    user_low_reading_id INTEGER REFERENCES readings(id) ON DELETE SET NULL,
+    user_high_reading_id INTEGER REFERENCES readings(id) ON DELETE SET NULL,
+    user_low_completed_at TIMESTAMP,
+    user_high_completed_at TIMESTAMP,
+    status VARCHAR(25) NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'completed', 'missed', 'generation_failed')),
+    error_message TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (streak_id, streak_date)
+);
+
+CREATE INDEX idx_friend_streak_days_date_status
+    ON friend_streak_days(streak_date, status);
+
+ALTER TABLE readings
+    ADD CONSTRAINT fk_readings_friend_streak_day
+    FOREIGN KEY (friend_streak_day_id)
+    REFERENCES friend_streak_days(id)
+    ON DELETE SET NULL;
 
 -- Tabla: reading_explanations (persiste preguntas/explicaciones de vocabulario, oraciones y glosario)
 CREATE TABLE reading_explanations (
