@@ -1,5 +1,5 @@
 project: dolynation
-app_version: 0.17.0
+app_version: 0.17.1
 updated: '2026-11-24'
 repositories:
   dolynation-atl-back:
@@ -7,9 +7,9 @@ repositories:
     tag: v0.15.1
     commit: ec35879f1a43de434da8d53040982e39020e79e2
   dolynation-tonatiuh-front:
-    version: 0.17.0
-    tag: v0.17.0
-    commit: c59a5f4ae77c033545b8f009d8f4409f622dff58
+    version: 0.17.1
+    tag: v0.17.1
+    commit: 0b5c53520262e142da4d81c75589de04180ee7ac
   dolynation-tlalli-infra:
     version: 0.21.0
     tag: v0.21.0
