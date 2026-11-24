@@ -289,6 +289,28 @@ jobs:
              IMAGE_TAG='$TAG' \
              bash '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/scripts/deploy-env.sh'"
 
+      - name: Smoke test de simulacion
+        run: |
+          set -euo pipefail
+
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+
+          VERSION="$(curl -fsSL \
+            https://raw.githubusercontent.com/DolyLanguagesORG/dolynation-tlalli-infra/develop/versions.yml \
+            | grep -E '^app_version:' | head -1 | cut -d: -f2 | tr -d ' \"')"
+
+          ssh -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT }}" \
+            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "bash '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/scripts/smoke-test.sh' \
+              'http://127.0.0.1:57041' 'http://127.0.0.1:57042' '$VERSION'"
+
       - name: Verificar la version desplegada
         env:
           TAG: ${{ inputs.tag }}

@@ -347,6 +347,28 @@ jobs:
              IMAGE_TAG='$TAG' \
              bash '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/scripts/deploy-env.sh'"
 
+      - name: Smoke test de staging
+        run: |
+          set -euo pipefail
+
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+
+          VERSION="$(curl -fsSL \
+            https://raw.githubusercontent.com/DolyLanguagesORG/dolynation-tlalli-infra/develop/versions.yml \
+            | grep -E '^app_version:' | head -1 | cut -d: -f2 | tr -d ' \"')"
+
+          ssh -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT }}" \
+            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "bash '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/scripts/smoke-test.sh' \
+              'http://127.0.0.1:57021' 'http://127.0.0.1:57022' '$VERSION'"
+
       - name: Registrar el deployment en los repos de los componentes
         # El gate de `main` de back y front exige un deployment exitoso en SU
         # environment `staging`. Ese deploy lo hace este repo (infra), asi que
@@ -386,8 +408,8 @@ jobs:
               continue
             fi
 
-            id="$(gh api --method POST "repos/DolyLanguagesORG/$repo/deployments" \
-              -f ref="$sha" -f environment=staging -F auto_merge=false --jq .id)"
+            id="$(printf '{"ref":"%s","environment":"staging","auto_merge":false,"required_contexts":[]}\n' "$sha" \
+              | gh api --method POST "repos/DolyLanguagesORG/$repo/deployments" --input - --jq .id)"
 
             gh api --method POST "repos/DolyLanguagesORG/$repo/deployments/$id/statuses" \
               -f state=success \
