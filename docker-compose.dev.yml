@@ -49,6 +49,10 @@ services:
     container_name: doly-dev-backend
     working_dir: /app
     command: sh -lc '[ -d node_modules ] || npm ci --no-audit --no-fund; exec npm run start:dev'
+    environment:
+      TZ: ${TZ:-America/Mexico_City}
+      FRIEND_STREAK_CRON_ENABLED: ${FRIEND_STREAK_CRON_ENABLED:-true}
+      FRIEND_STREAK_CRON_EXPRESSION: "${FRIEND_STREAK_CRON_EXPRESSION:-0 6 * * *}"
     volumes:
       - ../dolynation-atl-back:/app
     ports:

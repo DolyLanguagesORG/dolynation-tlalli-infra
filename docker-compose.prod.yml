@@ -24,6 +24,8 @@ services:
     restart: unless-stopped
     environment:
       - TZ=${TZ}
+      - FRIEND_STREAK_CRON_ENABLED=${FRIEND_STREAK_CRON_ENABLED:-true}
+      - FRIEND_STREAK_CRON_EXPRESSION=${FRIEND_STREAK_CRON_EXPRESSION:-0 6 * * *}
       - PORT=${PORT}
       - HOST=${HOST}
       - LOG_LEVEL=${LOG_LEVEL}
