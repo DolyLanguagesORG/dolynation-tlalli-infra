@@ -11,6 +11,13 @@ un PR de release contra `develop` que sube la versión y escribe esta sección; 
 mergearlo se crean el tag anotado y la GitHub Release. Ver
 [`conventions/versioning.md`](https://github.com/DolyLanguagesORG/dolynation-ehecatl-docs/blob/develop/conventions/versioning.md).
 
+## [0.20.1](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.20.0...v0.20.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* **smoke:** valida contrato Turnstile en smoke-test y dispara manifest del sitio ([#292](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/issues/292)) ([077dad1](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/commit/077dad19d0bb9fe0673bc617431bd3389c8639eb))
+
 ## [0.20.0](https://github.com/DolyLanguagesORG/dolynation-tlalli-infra/compare/v0.19.1...v0.20.0) (2026-11-23)
 
 
