@@ -167,6 +167,8 @@ CREATE TABLE readings (
     -- en vez de error: sin esto, un envio reintentado evaluaria dos veces
     -- (y la IA cobraria dos veces).
     evaluation_operation_id VARCHAR(100),
+    -- Hash determinista de parámetros de generación para caché de lecturas (RNF-04 / back#9).
+    prompt_hash VARCHAR(64),
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP,
     deleted_at TIMESTAMP
@@ -185,6 +187,9 @@ CREATE UNIQUE INDEX uq_readings_user_source_reading
     WHERE source_reading_id IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX idx_readings_user_origin_created
     ON readings(user_id, origin_type, created_at);
+CREATE INDEX idx_readings_user_prompt_hash
+    ON readings(user_id, prompt_hash)
+    WHERE prompt_hash IS NOT NULL AND deleted_at IS NULL;
 
 -- Solicitudes y relaciones de amistad.
 CREATE TABLE friendships (
