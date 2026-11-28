@@ -3,9 +3,9 @@ app_version: 0.18.0
 updated: '2026-11-28'
 repositories:
   dolynation-atl-back:
-    version: 0.17.0
-    tag: v0.17.0
-    commit: a7d53c78cafc88abffc40bdd9cb06ac26a2c4cb5
+    version: 0.18.0
+    tag: v0.18.0
+    commit: d6320ab7e02f90fda00d0e4fa8ac669092819c59
   dolynation-tonatiuh-front:
     version: 0.18.0
     tag: v0.18.0
