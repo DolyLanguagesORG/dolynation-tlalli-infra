@@ -122,6 +122,27 @@ jobs:
           done
           echo "Las 22 tablas esperadas estan."
 
+      - uses: actions/checkout@v4
+        with:
+          repository: DolyLanguagesORG/dolynation-atl-back
+          ref: develop
+          path: .backend
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verificar paridad Drizzle schema.ts vs SQL
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: dolynglish
+        run: node scripts/check-schema-parity.mjs .backend/src/database/drizzle/schema.ts
+
 
   # El runner del schema (`scripts/apply-schema.sh`) es lo que ejecuta cada
   # deploy. Si se rompe, la base se queda con el schema viejo y el backend

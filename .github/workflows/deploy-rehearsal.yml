@@ -218,6 +218,8 @@ jobs:
           CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
           FRIEND_STREAK_CRON_ENABLED: ${{ vars.FRIEND_STREAK_CRON_ENABLED || 'true' }}
           FRIEND_STREAK_CRON_EXPRESSION: ${{ vars.FRIEND_STREAK_CRON_EXPRESSION || '0 6 * * *' }}
+          ACCESS_REQUESTS_ENABLED: ${{ vars.ACCESS_REQUESTS_ENABLED }}
+          ADMIN_NOTIFICATION_EMAIL: ${{ vars.ADMIN_NOTIFICATION_EMAIL }}
         run: |
           set -euo pipefail
 
@@ -257,11 +259,15 @@ jobs:
             "$CAPTCHA_PROVIDER" "$CAPTCHA_SITE_KEY" "$CAPTCHA_SECRET_KEY" \
             "$CAPTCHA_APPEARANCE" "$CAPTCHA_ALLOWED_HOSTNAMES" "$CAPTCHA_FAIL_OPEN" \
             "$CORS_ALLOWED_ORIGINS" | base64 -w0)"
+          if [ -z "${ACCESS_REQUESTS_ENABLED:-}" ]; then
+            ACCESS_REQUESTS_ENABLED="false"
+          fi
           CONTENT="$(
             {
               printf '%s' "$CONTENT" | base64 -d
-              printf 'FRIEND_STREAK_CRON_ENABLED=%s\nFRIEND_STREAK_CRON_EXPRESSION=%s\n' \
-                "$FRIEND_STREAK_CRON_ENABLED" "$FRIEND_STREAK_CRON_EXPRESSION"
+              printf 'FRIEND_STREAK_CRON_ENABLED=%s\nFRIEND_STREAK_CRON_EXPRESSION=%s\nACCESS_REQUESTS_ENABLED=%s\nADMIN_NOTIFICATION_EMAIL=%s\n' \
+                "$FRIEND_STREAK_CRON_ENABLED" "$FRIEND_STREAK_CRON_EXPRESSION" \
+                "$ACCESS_REQUESTS_ENABLED" "$ADMIN_NOTIFICATION_EMAIL"
             } | base64 -w0
           )"
 
@@ -269,7 +275,7 @@ jobs:
             -p "${{ secrets.DEPLOY_PORT }}" \
             -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "umask 077 && base64 -d > '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/.env'"
+            "umask 077 && base64 -d > '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/.env' && chmod 600 '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/.env'"
       # `SCHEMA_FORCE=1`: la base de rehearsal es de prueba (datos
       # desechables), asi que si el schema cambio se recrea. En produccion NO:
       # ahi el deploy se detiene antes de borrar nada.
