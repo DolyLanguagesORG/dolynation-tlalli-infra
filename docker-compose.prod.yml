@@ -7,13 +7,26 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
     ports:
-      - "57000:5432"
+      # Solo local: nunca exponer PostgreSQL en 0.0.0.0 en produccion.
+      - "127.0.0.1:${DB_HOST_PORT:-57000}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./database/postgres:/docker-entrypoint-initdb.d
+      - ./database/postgres:/docker-entrypoint-initdb.d:ro
     networks:
       - dolynglish-network
-    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 512m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    restart: unless-stopped
 
   backend-dolynglish:
     build:
@@ -23,54 +36,74 @@ services:
     container_name: dolynglish-backend
     restart: unless-stopped
     environment:
-      - TZ=${TZ}
+      - TZ=${TZ:-America/Mexico_City}
       - FRIEND_STREAK_CRON_ENABLED=${FRIEND_STREAK_CRON_ENABLED:-true}
       - FRIEND_STREAK_CRON_EXPRESSION=${FRIEND_STREAK_CRON_EXPRESSION:-0 6 * * *}
-      - PORT=${PORT}
-      - HOST=${HOST}
-      - LOG_LEVEL=${LOG_LEVEL}
-      - NODE_ENV=${NODE_ENV}
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_DATABASE=${DB_DATABASE}
-      - JWT_SECRET=${JWT_SECRET}
-      - JWT_ACCESS_TTL=${JWT_ACCESS_TTL}
-      - JWT_REFRESH_TTL=${JWT_REFRESH_TTL}
-      - AI_DEFAULT_PROVIDER=${AI_DEFAULT_PROVIDER}
-      - MINIMAX_API_KEY=${MINIMAX_API_KEY}
-      - MINIMAX_MODEL=${MINIMAX_MODEL}
-      - MINIMAX_REASONING_EFFORT=${MINIMAX_REASONING_EFFORT}
+      - PORT=${PORT:-3333}
+      - HOST=${HOST:-0.0.0.0}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - NODE_ENV=${NODE_ENV:-production}
+      - DB_HOST=${DB_HOST:-database-postgres-dolynglish}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USER=${DB_USER:-${POSTGRES_USER}}
+      - DB_PASSWORD=${DB_PASSWORD:-${POSTGRES_PASSWORD}}
+      - DB_DATABASE=${DB_DATABASE:-${POSTGRES_DB}}
+      - JWT_SECRET=${JWT_SECRET:-}
+      - JWT_ACCESS_TTL=${JWT_ACCESS_TTL:-5m}
+      - JWT_REFRESH_TTL=${JWT_REFRESH_TTL:-30d}
+      - AI_DEFAULT_PROVIDER=${AI_DEFAULT_PROVIDER:-minimax}
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
+      - MINIMAX_MODEL=${MINIMAX_MODEL:-MiniMax-M2.7}
+      - MINIMAX_REASONING_EFFORT=${MINIMAX_REASONING_EFFORT:-low}
       # Proveedor Google (Gemini + gemini-decision-1).
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - GOOGLE_MODEL=${GOOGLE_MODEL}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GOOGLE_MODEL=${GOOGLE_MODEL:-gemini-3.5-flash-lite}
       # Moderacion de categorias dinamicas.
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODERATION_ENDPOINT=${OPENAI_MODERATION_ENDPOINT}
-      - OPENAI_MODERATION_MODEL=${OPENAI_MODERATION_MODEL}
-      - CATEGORY_MODERATION_ENABLED=${CATEGORY_MODERATION_ENABLED}
-      - CATEGORY_MODERATION_AI_ENABLED=${CATEGORY_MODERATION_AI_ENABLED}
-      - CATEGORY_MODERATION_AI_PROVIDER=${CATEGORY_MODERATION_AI_PROVIDER}
-      - CATEGORY_DAILY_LIMIT=${CATEGORY_DAILY_LIMIT}
-      - CATEGORY_MODERATION_SCORE_THRESHOLD=${CATEGORY_MODERATION_SCORE_THRESHOLD}
-      - CATEGORY_MODERATION_TIMEOUT_MS=${CATEGORY_MODERATION_TIMEOUT_MS}
-      - CATEGORY_MODERATION_CACHE_TTL_MS=${CATEGORY_MODERATION_CACHE_TTL_MS}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODERATION_ENDPOINT=${OPENAI_MODERATION_ENDPOINT:-https://api.openai.com/v1/moderations}
+      - OPENAI_MODERATION_MODEL=${OPENAI_MODERATION_MODEL:-omni-moderation-latest}
+      - CATEGORY_MODERATION_ENABLED=${CATEGORY_MODERATION_ENABLED:-true}
+      - CATEGORY_MODERATION_AI_ENABLED=${CATEGORY_MODERATION_AI_ENABLED:-true}
+      - CATEGORY_MODERATION_AI_PROVIDER=${CATEGORY_MODERATION_AI_PROVIDER:-auto}
+      - CATEGORY_DAILY_LIMIT=${CATEGORY_DAILY_LIMIT:-20}
+      - CATEGORY_MODERATION_SCORE_THRESHOLD=${CATEGORY_MODERATION_SCORE_THRESHOLD:-0.45}
+      - CATEGORY_MODERATION_TIMEOUT_MS=${CATEGORY_MODERATION_TIMEOUT_MS:-15000}
+      - CATEGORY_MODERATION_CACHE_TTL_MS=${CATEGORY_MODERATION_CACHE_TTL_MS:-86400000}
       # Correo transaccional (SMTP). En produccion el proveedor es Brevo.
-      - SMTP_HOST=${SMTP_HOST}
-      - SMTP_PORT=${SMTP_PORT}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASSWORD=${SMTP_PASSWORD}
-      - SMTP_FROM=${SMTP_FROM}
-      - SMTP_FROM_NAME=${SMTP_FROM_NAME}
-      - SMTP_SECURE=${SMTP_SECURE}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME:-}
+      - SMTP_SECURE=${SMTP_SECURE:-false}
       # Base publica del frontend: se usa para los enlaces de los correos.
-      - FRONTEND_BASE_URL=${FRONTEND_BASE_URL}
+      - FRONTEND_BASE_URL=${FRONTEND_BASE_URL:-}
       # Exige confirmar el correo antes de poder iniciar sesion.
-      - EMAIL_VERIFICATION_REQUIRED=${EMAIL_VERIFICATION_REQUIRED}
+      - EMAIL_VERIFICATION_REQUIRED=${EMAIL_VERIFICATION_REQUIRED:-false}
       # Habilita solicitudes con aprobacion de administrador para planes y desbloqueo de idioma.
-      - ACCESS_REQUESTS_ENABLED=${ACCESS_REQUESTS_ENABLED:-true}
+      - ACCESS_REQUESTS_ENABLED=${ACCESS_REQUESTS_ENABLED:-false}
       - ADMIN_NOTIFICATION_EMAIL=${ADMIN_NOTIFICATION_EMAIL:-}
+      # Pasarela de pagos (Stripe / manual).
+      - BILLING_PROVIDER=${BILLING_PROVIDER:-manual}
+      - BILLING_ENV_TAG=${BILLING_ENV_TAG:-production}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-}
+      - STRIPE_CURRENCY=${STRIPE_CURRENCY:-mxn}
+      - STRIPE_CHECKOUT_UI_MODE=${STRIPE_CHECKOUT_UI_MODE:-custom}
+      - STRIPE_PRICE_DOLLY=${STRIPE_PRICE_DOLLY:-}
+      - STRIPE_PRICE_DOLLY_PLUS=${STRIPE_PRICE_DOLLY_PLUS:-}
+      - STRIPE_PRICE_DOLLY_PRO=${STRIPE_PRICE_DOLLY_PRO:-}
+      - STRIPE_PRICE_LANGUAGE_UNLOCK=${STRIPE_PRICE_LANGUAGE_UNLOCK:-}
+      # Autenticacion externa OAuth 2.0 / OIDC.
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      - GOOGLE_OAUTH_REDIRECT_URI=${GOOGLE_OAUTH_REDIRECT_URI:-}
+      - MICROSOFT_OAUTH_CLIENT_ID=${MICROSOFT_OAUTH_CLIENT_ID:-}
+      - MICROSOFT_OAUTH_CLIENT_SECRET=${MICROSOFT_OAUTH_CLIENT_SECRET:-}
+      - MICROSOFT_OAUTH_TENANT=${MICROSOFT_OAUTH_TENANT:-common}
+      - MICROSOFT_OAUTH_REDIRECT_URI=${MICROSOFT_OAUTH_REDIRECT_URI:-}
       # Seguridad anti-bot (Cloudflare Turnstile) y CORS.
       - CAPTCHA_PROVIDER=${CAPTCHA_PROVIDER:-disabled}
       - CAPTCHA_SITE_KEY=${CAPTCHA_SITE_KEY:-}
@@ -81,11 +114,63 @@ services:
       - CAPTCHA_FAIL_OPEN=${CAPTCHA_FAIL_OPEN:-false}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
     ports:
-      - "57001:3333"
+      - "127.0.0.1:${BACKEND_HOST_PORT:-57001}:3333"
     networks:
       - dolynglish-network
     depends_on:
-      - database-postgres-dolynglish
+      database-postgres-dolynglish:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3333/api/v1/health/ready >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  frontend-dolynglish:
+    image: ghcr.io/dolylanguagesorg/dolynation-tonatiuh-front:${FRONTEND_TAG:-latest}
+    container_name: dolynglish-frontend
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ:-America/Mexico_City}
+      - NODE_ENV=production
+      - BACKEND_INTERNAL_URL=http://backend-dolynglish:3333/api/v1
+      - APP_VERSION=${APP_VERSION:-1.0.0}
+    ports:
+      - "127.0.0.1:${FRONTEND_HOST_PORT:-57002}:3000"
+    networks:
+      - dolynglish-network
+    depends_on:
+      backend-dolynglish:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
 volumes:
   postgres-data:
