@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "draft": true,
+      "force-tag-creation": true,
+      "prerelease": true,
+      "package-name": "dolynation-tlalli-infra",
+      "changelog-path": "CHANGELOG.md",
+      "include-component-in-tag": false,
+      "pull-request-title-pattern": "chore(release): v${version}",
+      "extra-files": [
+        {
+          "type": "yaml",
+          "path": "versions.yml",
+          "jsonpath": "$.repositories.dolynation-tlalli-infra.version"
+        }
+      ]
+    }
+  }
+}

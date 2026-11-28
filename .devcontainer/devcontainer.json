@@ -1,0 +1,44 @@
+{
+  "name": "DolyNation — Infraestructura (Tlalli)",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
+    "ghcr.io/devcontainers/features/docker-compose:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-docker",
+        "redhat.vscode-yaml",
+        "foxundermountain.shellcheck",
+        "timonwong.shellcheck"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "yaml.schemas": {}
+      }
+    }
+  },
+  "forwardPorts": [
+    57010,
+    57011,
+    57012
+  ],
+  "portsAttributes": {
+    "57010": {
+      "label": "PostgreSQL (dev)",
+      "onAutoForward": "silent"
+    },
+    "57011": {
+      "label": "Backend (dev)",
+      "onAutoForward": "silent"
+    },
+    "57012": {
+      "label": "Frontend (dev)",
+      "onAutoForward": "silent"
+    }
+  },
+  "postCreateCommand": "docker compose -f docker-compose.test.yml config > /dev/null && echo 'Compose de pruebas válido'",
+  "remoteUser": "vscode"
+}

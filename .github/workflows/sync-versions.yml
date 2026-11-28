@@ -1,0 +1,296 @@
+name: sync-versions
+
+# Mantiene `versions.yml` al día cuando cualquier repositorio de la
+# organización publica una release.
+#
+# Cada repo, al publicar su tag, envía un `repository_dispatch` a este
+# repositorio (ver `.github/workflows/release-please.yml` en cada uno). Este
+# workflow actualiza la fila del repo que publicó y abre —o actualiza— el pull
+# request con el cambio.
+#
+# El manifiesto es la fuente de verdad de qué versión de cada componente compone
+# la aplicación publicada. Por eso el cambio va en un PR y no en un push
+# directo: `develop` está protegido.
+
+on:
+  repository_dispatch:
+    types: [release-published]
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: 'Repo que publicó la release (ej. dolynation-atl-back)'
+        required: true
+        type: string
+      version:
+        description: 'Versión publicada (ej. v0.2.0)'
+        required: true
+        type: string
+      sha:
+        description: 'Commit exacto del tag'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  # El grupo lleva el repositorio: los cuatro repos mandan su dispatch a la
+  # vez (los tags se publican juntos) y, con un unico grupo, GitHub cancelaba
+  # los runs que estaban esperando. Con un grupo por repo, los cuatro corren
+  # en paralelo.
+  group: sync-versions-${{ github.event.client_payload.repository || inputs.repository }}
+  # No se cancela: si ya hay un PR de sincronizacion en curso, terminarlo
+  # evita abrir dos PRs para el mismo repo.
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Actualizar la fila del repositorio
+        id: update
+        env:
+          # El PAT es necesario: el GITHUB_TOKEN del workflow solo alcanza
+          # este repo, y el SHA se pide en el repo que publico el tag (que
+          # puede ser otro). Sin esto, la API devuelve 404 y el SHA sale
+          # vacio.
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          ORG: DolyLanguagesORG
+          REPOSITORY: ${{ github.event.client_payload.repository || inputs.repository }}
+          VERSION: ${{ github.event.client_payload.version || inputs.version }}
+          SHA: ${{ github.event.client_payload.sha || inputs.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$REPOSITORY" ] || [ -z "$VERSION" ]; then
+            echo "::error::Falta el repositorio o la version del payload."
+            exit 1
+          fi
+
+          # El payload puede traer `owner/repo`: el manifiesto usa solo el
+          # nombre del repositorio.
+          REPOSITORY="${REPOSITORY##*/}"
+
+          bare="${VERSION#v}"
+          export TODAY="$(date -u +%Y-%m-%d)"
+
+          if [ -z "$SHA" ]; then
+            # El tag lleva la 'v' ('v0.3.0'): hay que pedirlo CON ella.
+            # Pedirlo sin la 'v' devuelve 422 y el SHA salia vacio, con lo
+            # que la fila del manifiesto se quedaba sin commit.
+            SHA="$(gh api "repos/$ORG/$REPOSITORY/commits/v$bare" --jq '.sha' 2>/dev/null || echo '')"
+          fi
+
+          python3 - <<'PY'
+          import os, re, pathlib, sys
+
+          repo = os.environ['REPOSITORY']
+          version = os.environ['VERSION'].lstrip('v')
+          # La version publicada con su propio nombre: mas abajo, el bucle
+          # que busca las filas de los repos de la app REASIGNA `version` con
+          # el resultado de una busqueda (un `re.Match`). Si se usara `version`
+          # despues de ese bucle, el manifiesto receberia el texto
+          # `<re.Match object: ...>` en vez de un numero.
+          version_publicada = version
+          sha = os.environ.get('SHA', '').strip()
+
+          # Cada repo tiene SU manifiesto. La landing es un producto aparte
+          # (otro dominio, otro despliegue) y por eso NO comparte manifiesto
+          # con la aplicacion: publicar la landing no toca ni una linea del
+          # manifiesto de la app.
+          SITE_REPOS = ('dolynation-tetl-landing',)
+          manifest_name = 'versions-site.yml' if repo in SITE_REPOS else 'versions.yml'
+          path = pathlib.Path(manifest_name)
+          text = path.read_text()
+
+          # Localiza la fila del repositorio dentro de `repositories:` y
+          # reemplaza SOLO sus renglones (version, tag, commit). La clave del
+          # repositorio se conserva: el grupo 1 es la linea con la clave y el
+          # grupo 2 son sus renglones indentados.
+          pattern = re.compile(
+              r'(^  ' + re.escape(repo) + r':\n)((?:    [^\n]*\n)*)',
+              re.MULTILINE,
+          )
+          if not pattern.search(text):
+              print(f'::error::No se encontro la fila de {repo} en {manifest_name}')
+              sys.exit(1)
+
+          block = f'    version: {version}\n    tag: v{version}\n'
+          if sha:
+              block += f'    commit: {sha}\n'
+
+          text = pattern.sub(lambda m: m.group(1) + block, text, count=1)
+
+          # `app_version` es la version unica de la aplicacion: sigue a la
+          # version mas alta entre los componentes que la forman (backend y
+          # frontend). Infra y docs versionan su propio software: no mandan en
+          # la version de la app. Asi el manifiesto
+          # nunca queda desfasado respecto a lo que hay desplegado.
+          def como_version(valor):
+              try:
+                  return tuple(int(x) for x in str(valor).split('.'))
+              except ValueError:
+                  return (0, 0, 0)
+
+          # Solo cuentan backend y frontend: son los que forman la app que
+          # ve el usuario. Infra y docs versionan su propio software.
+          APP_REPOS = ('dolynation-atl-back', 'dolynation-tonatiuh-front')
+
+          versiones = []
+          for nombre in APP_REPOS:
+              fila = re.search(
+                  r'^  ' + re.escape(nombre) + r':\n((?:    [^\n]*\n)*)',
+                  text, re.MULTILINE)
+              if not fila:
+                  continue
+              version = re.search(
+                  r'^    version: ([0-9][^\n]*)$', fila.group(1), re.MULTILINE)
+              if version:
+                  versiones.append(version.group(1).strip())
+
+          # El `app_version` solo existe en el manifiesto de la aplicacion.
+          # En el del sitio no se toca: son dos productos con dos ciclos.
+          if versiones and repo not in SITE_REPOS:
+              mayor = max(versiones, key=como_version)
+              text = re.sub(
+                  r'^app_version: .*$',
+                  f'app_version: {mayor}',
+                  text,
+                  count=1,
+                  flags=re.MULTILINE,
+              )
+
+          # `site_version` es la version de la LANDING. La aplicacion y la
+          # landing son dos productos en dos dominios, con lineas de release
+          # independientes: un retoque visual en la landing no puede mover la
+          # version de la aplicacion (ni al reves).
+          #
+          # Cuando publica la landing, se mueve SOLO su version: la
+          # `app_version` se calcula con backend y frontend y no le afecta.
+          if repo in SITE_REPOS:
+              text = re.sub(
+                  r'^site_version: .*$',
+                  f'site_version: {version_publicada}',
+                  text,
+                  count=1,
+                  flags=re.MULTILINE,
+              )
+
+          # `updated` es la fecha del ultimo cambio del manifiesto. Las fechas
+          # van entrecomilladas para que el actualizador YAML de release-please
+          # no las convierta en marcas de tiempo ISO.
+          today = os.environ.get('TODAY', '')
+          if today:
+              text = re.sub(r"^updated: .*$", f"updated: '{today}'", text, count=1, flags=re.MULTILINE)
+
+          path.write_text(text)
+          print(text)
+          PY
+
+      - name: Abrir el pull request del manifiesto
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          REPOSITORY: ${{ github.event.client_payload.repository || inputs.repository }}
+          VERSION: ${{ github.event.client_payload.version || inputs.version }}
+        run: |
+          set -euo pipefail
+
+          bare="${VERSION#v}"
+          branch="chore/issue-7-sync-${REPOSITORY#dolynation-}"
+          title="chore(versions): actualizar ${REPOSITORY} a v${bare}"
+
+          # Si el manifiesto ya decia lo mismo, no hay nada que abrir.
+          #
+          # Ojo: se miran LOS DOS. El cambio de la landing vive en
+          # `versions-site.yml`, asi que mirar solo `versions.yml` hacia
+          # pensar que no habia nada que abrir (y el release del sitio se
+          # perdia en silencio).
+          if git diff --quiet -- versions.yml versions-site.yml; then
+            echo "El manifiesto ya estaba al dia con v${bare}: no se abre PR."
+            exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          # Se anade el manifiesto que cambio: el de la app o el del sitio.
+          git add versions.yml versions-site.yml
+          git commit -m "chore(versions): actualizar ${REPOSITORY} a v${bare}"
+          git push --force origin "$branch"
+
+          body="Actualiza la fila de \`${REPOSITORY}\` en \`versions.yml\` con la
+          versión publicada \`v${bare}\`.
+
+          Ref: DolyLanguagesORG/dolynation-tlalli-infra#7"
+
+          existing="$(gh pr list --repo "${{ github.repository }}" --head "$branch" --state open --json number --jq '.[0].number' 2>/dev/null || echo '')"
+
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --repo "${{ github.repository }}" --title "$title" --body "$body" >/dev/null
+            echo "PR #$existing actualizado"
+          else
+            gh pr create --repo "${{ github.repository }}" --base develop --head "$branch" \
+              --title "$title" --body "$body" --label area:infra --label sprint-3 >/dev/null
+            echo "PR creado para $branch"
+          fi
+
+      - name: Mergear el PR del manifiesto cuando la CI este en verde
+        # Mismo caso que el PR de release: lo abre el PAT y `develop` pide 1
+        # aprobacion, que nadie puede dar sobre el propio PR. El manifiesto se
+        # actualiza solo cuando los checks pasan.
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          REPOSITORY: ${{ github.event.client_payload.repository || inputs.repository }}
+        run: |
+          set -euo pipefail
+
+          # La rama del PR es la misma que usa el paso que lo abre.
+          branch="chore/issue-7-sync-${REPOSITORY#dolynation-}"
+
+          existing="$(gh pr list --repo "${{ github.repository }}" --head "$branch" --base develop --state open --json number --jq '.[0].number // empty')"
+
+          if [ -z "$existing" ]; then
+            echo "No hay PR del manifiesto abierto: nada que hacer."
+            exit 0
+          fi
+
+          for i in $(seq 1 20); do
+            # Se miran **TODOS** los checks, no solo los que la proteccion de
+            # ramas exige. Con `--required` el bot se saltaba el check
+            # "Validar el manifiesto" (que no es requerido) y mergeaba un
+            # manifiesto roto: el `site_version` llego a develop con el texto
+            # `<re.Match object: ...>` en vez de un numero.
+            #
+            # Los checks que no se disparan no aparecen: no se espera a ellos.
+            #
+            # Ojo: `gh pr checks --json` solo acepta `name` y `state` (y
+            # `bucket`); `isRequired` NO existe y hace fallar el comando.
+            checks="$(gh pr checks "$existing" --repo "${{ github.repository }}" --json name,state 2>/dev/null || echo '[]')"
+
+            total="$(printf '%s' "$checks" | jq 'length')"
+            pendientes="$(printf '%s' "$checks" | jq '[.[] | select(.state != "SUCCESS" and .state != "SKIPPED")] | length')"
+            fallidos="$(printf '%s' "$checks" | jq '[.[] | select(.state == "FAILURE" or .state == "CANCELLED" or .state == "TIMED_OUT")] | length')"
+
+            if [ "$fallidos" -gt 0 ]; then
+              echo "::warning::Un check del PR del manifiesto fallo: no se mergea."
+              printf '%s' "$checks" | jq -r '.[] | "  \(.name): \(.state)"'
+              exit 0
+            fi
+
+            if [ "$total" -gt 0 ] && [ "$pendientes" -eq 0 ]; then
+              echo "Checks en verde: se mergea el PR del manifiesto."
+              gh pr merge "$existing" --repo "${{ github.repository }}" --squash --admin --delete-branch=false
+              exit 0
+            fi
+
+            echo "Checks del PR del manifiesto: $pendientes pendientes (intento $i/20)."
+            sleep 30
+          done
+
+          echo "::warning::Se agoto el tiempo esperando los checks: el PR del manifiesto sigue abierto."

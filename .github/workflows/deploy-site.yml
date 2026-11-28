@@ -1,0 +1,174 @@
+name: deploy-site
+
+# Despliega la LANDING a un ambiente (staging, rehearsal o produccion).
+#
+# A diferencia de `deploy-prod.yml` (que despliega la APLICACION entera), este
+# workflow despliega SOLO la landing: la base, el backend y el frontend no se
+# tocan. Es lo que permite publicar un cambio visual sin mover la app.
+#
+# El ambiente se elige a mano: publicar la landing es una decision, no un
+# efecto secundario de la release de la aplicacion.
+#
+# Ver operations/FLUJO-DE-RELEASE.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Ambiente de destino'
+        required: true
+        type: choice
+        options:
+          - staging
+          - rehearsal
+          - prod
+      site:
+        description: 'Que sitio se despliega'
+        required: false
+        default: landing
+        type: choice
+        options:
+          - landing
+
+permissions:
+  contents: read
+  # GitHub actualiza el estado del deployment automaticamente; sin este
+  # permiso el GITHUB_TOKEN es de solo lectura y no puede reportarlo.
+  deployments: write
+
+concurrency:
+  group: deploy-site-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Desplegar la landing en ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Instalar llave SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KEY_PASSPHRASE: ${{ secrets.DEPLOY_SSH_KEY_PASSPHRASE }}
+          DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+
+          if [ -z "${DEPLOY_SSH_KEY:-}" ] || [ -z "${DEPLOY_HOST:-}" ] || [ -z "${DEPLOY_PORT:-}" ]; then
+            echo "::error::Faltan secrets de despliegue (DEPLOY_SSH_KEY, DEPLOY_HOST, DEPLOY_PORT) en el environment '${{ inputs.environment }}'."
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          if [ -n "${DEPLOY_SSH_KEY_PASSPHRASE:-}" ]; then
+            printf '%s\n' "$DEPLOY_SSH_KEY_PASSPHRASE" > ~/.ssh/deploy_passphrase
+            chmod 600 ~/.ssh/deploy_passphrase
+            printf '%s\n' '#!/usr/bin/env bash' 'cat ~/.ssh/deploy_passphrase' > ~/.ssh/askpass.sh
+            chmod 700 ~/.ssh/askpass.sh
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+            ssh-agent -s | grep '^SSH_AUTH_SOCK\|^SSH_AGENT_PID' > ~/.ssh/agent_env
+            . ~/.ssh/agent_env
+            if ! ssh-add ~/.ssh/deploy_key; then
+              echo "::error::No se pudo cargar la llave en el agente SSH. Revisa DEPLOY_SSH_KEY_PASSPHRASE."
+              exit 1
+            fi
+            echo "Llave cargada en el agente SSH."
+          fi
+
+          ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" > /tmp/host_keys 2>&1 || true
+          if [ -n "${DEPLOY_HOST_KEY:-}" ]; then
+            if ! grep -qF "$DEPLOY_HOST_KEY" /tmp/host_keys; then
+              echo "::error::La clave del host no coincide con DEPLOY_HOST_KEY."
+              echo "::error::Si el host cambio de verdad, actualiza el secret antes de desplegar."
+              exit 1
+            fi
+          fi
+          if [ ! -s /tmp/host_keys ]; then
+            echo "::error::No se pudo obtener la clave del host $DEPLOY_HOST:$DEPLOY_PORT."
+            echo "::error::Detalle del escaneo:"
+            cat /tmp/host_keys
+            exit 1
+          fi
+          cat /tmp/host_keys >> ~/.ssh/known_hosts
+
+      - name: Sincronizar archivos de deploy de infraestructura
+        run: |
+          set -euo pipefail
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+
+          mkdir -p /tmp/infra-site/scripts
+          for f in docker-compose.site.yml versions-site.yml scripts/deploy-site.sh scripts/smoke-site.sh; do
+            curl -fsSL \
+              "https://raw.githubusercontent.com/DolyLanguagesORG/dolynation-tlalli-infra/develop/$f" \
+              -o "/tmp/infra-site/$f"
+          done
+
+          tar -czf - -C /tmp/infra-site docker-compose.site.yml versions-site.yml scripts \
+            | ssh -i ~/.ssh/deploy_key \
+                -p "${{ secrets.DEPLOY_PORT }}" \
+                -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+                "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+                "mkdir -p '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra' && \
+                 tar -xzf - -C '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra' && \
+                 chmod +x '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra'/scripts/*.sh"
+
+      - name: Desplegar la landing
+        env:
+          SITE: ${{ inputs.site }}
+        run: |
+          set -euo pipefail
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+
+          # Cada ambiente tiene su nombre de proyecto de compose, su puerto y la
+          # URL base hacia la aplicacion que inyecta /runtime-config.js.
+          # El puerto va en 127.0.0.1: lo consume el proxy del servidor.
+          case "${{ inputs.environment }}" in
+            staging)
+              project=doly-site-staging
+              port=57023
+              app_base_url='https://stagingplay.dolynation.app'
+              ;;
+            rehearsal)
+              project=doly-site-rehearsal
+              port=57043
+              app_base_url='http://127.0.0.1:57042'
+              ;;
+            prod)
+              project=doly-site-prod
+              port=57033
+              app_base_url='https://play.dolynation.app'
+              ;;
+            *) echo "::error::Ambiente desconocido: ${{ inputs.environment }}"; exit 1 ;;
+          esac
+
+          echo "Ambiente: ${{ inputs.environment }} (compose=$project, puerto=$port, app_base_url=$app_base_url)"
+
+          ssh -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT }}" \
+            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "ORG_DIR='${{ secrets.ORG_PATH }}' COMPOSE_PROJECT_NAME='$project' LANDING_HOST_PORT='$port' APP_BASE_URL='$app_base_url' bash '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/scripts/deploy-site.sh'"

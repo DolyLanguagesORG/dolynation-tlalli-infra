@@ -1,0 +1,159 @@
+name: smoke-test
+
+# Smoke test del ambiente desplegado.
+#
+# Se dispara DESPUES de un despliegue y FALLA si el ambiente no cumple el
+# contrato: un smoke test que no puede fallar no sirve de nada.
+#
+# El script vive en el repo de infra (`scripts/smoke-test.sh`) y se ejecuta en
+# el servidor, contra el ambiente recien desplegado.
+#
+# Lo que NO se puede automatizar (que la lectura generada tenga sentido, que
+# el diseno se vea bien) lo verifica una persona con el checklist de salida.
+#
+# Ver operations/PLAN-DE-DESPLIEGUE.md.
+
+on:
+  workflow_run:
+    workflows: ['deploy-rehearsal', 'deploy-staging', 'deploy-prod']
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      api:
+        description: 'URL base de la API'
+        required: true
+        type: string
+      web:
+        description: 'URL base del frontend'
+        required: true
+        type: string
+      version:
+        description: 'Version esperada (la del manifiesto)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-test-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Smoke test
+    runs-on: ubuntu-latest
+    # Environment propio (`smoke-test`), NO `staging` ni `prod`: si el smoke
+    # test declarara `staging`, GitHub registraria un deployment mas en ese
+    # environment y el gate de `main` podria tomar un smoke test por un
+    # despliegue real.
+    environment: smoke-test
+    # Con `workflow_run` y `types: [completed]` este workflow tambien se
+    # dispara cuando el deploy anterior termino en `failure`: se verificaria
+    # un ambiente a medio desplegar. Solo se corre si el deploy fue exitoso.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Instalar llave SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KEY_PASSPHRASE: ${{ secrets.DEPLOY_SSH_KEY_PASSPHRASE }}
+          DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          if [ -n "${DEPLOY_SSH_KEY_PASSPHRASE:-}" ]; then
+            printf '%s\n' "$DEPLOY_SSH_KEY_PASSPHRASE" > ~/.ssh/deploy_passphrase
+            chmod 600 ~/.ssh/deploy_passphrase
+            printf '%s\n' '#!/usr/bin/env bash' 'cat ~/.ssh/deploy_passphrase' > ~/.ssh/askpass.sh
+            chmod 700 ~/.ssh/askpass.sh
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+            ssh-agent -s | grep '^SSH_AUTH_SOCK\|^SSH_AGENT_PID' > ~/.ssh/agent_env
+            . ~/.ssh/agent_env
+            ssh-add ~/.ssh/deploy_key
+          fi
+
+          # La clave del host ya no se acepta "a ciegas": se compara con la
+          # que esta en el secret DEPLOY_HOST_KEY. Si no coincide (el host
+          # cambio o hay un intermediario), el deploy se detiene.
+          ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" > /tmp/host_keys 2>&1 || true
+          if [ -n "${DEPLOY_HOST_KEY:-}" ]; then
+            if ! grep -qF "$DEPLOY_HOST_KEY" /tmp/host_keys; then
+              echo "::error::La clave del host no coincide con DEPLOY_HOST_KEY."
+              echo "::error::Si el host cambio de verdad, actualiza el secret antes de desplegar."
+              exit 1
+            fi
+          fi
+          cat /tmp/host_keys >> ~/.ssh/known_hosts
+
+      - name: Ejecutar el smoke test
+        env:
+          API_URL: ${{ inputs.api }}
+          WEB_URL: ${{ inputs.web }}
+          EXPECTED_VERSION: ${{ inputs.version }}
+          DEPLOY_WORKFLOW: ${{ github.event.workflow_run.name }}
+        run: |
+          set -euo pipefail
+
+          # En `workflow_dispatch` las URLs vienen de los inputs. En
+          # `workflow_run` no existen: se deducen del ambiente que se
+          # desplego (el nombre del workflow que disparo el evento).
+          if [ -z "$API_URL" ] || [ -z "$WEB_URL" ]; then
+            case "$DEPLOY_WORKFLOW" in
+              deploy-rehearsal)
+                API_URL="http://127.0.0.1:57041"
+                WEB_URL="http://127.0.0.1:57042"
+                ;;
+              deploy-staging)
+                API_URL="http://127.0.0.1:57021"
+                WEB_URL="http://127.0.0.1:57022"
+                ;;
+              deploy-prod)
+                API_URL="http://127.0.0.1:57031"
+                WEB_URL="http://127.0.0.1:57032"
+                ;;
+              *)
+                echo "::error::No se sabe que ambiente se desplego ('$DEPLOY_WORKFLOW')."
+                exit 1
+                ;;
+            esac
+          fi
+
+          if [ -z "$EXPECTED_VERSION" ]; then
+            EXPECTED_VERSION="$(curl -fsSL \
+              https://raw.githubusercontent.com/DolyLanguagesORG/dolynation-tlalli-infra/develop/versions.yml \
+              | grep -E '^app_version:' | head -1 | cut -d: -f2 | tr -d ' \"')"
+          fi
+
+          echo "Ambiente: $DEPLOY_WORKFLOW"
+          echo "API:  $API_URL"
+          echo "Web:  $WEB_URL"
+          echo "Version esperada: $EXPECTED_VERSION"
+
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+
+          # El script corre en el servidor: el ambiente esta ahi, en loopback.
+          ssh -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT }}" \
+            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "set -euo pipefail; \
+             curl -fsSL 'https://raw.githubusercontent.com/DolyLanguagesORG/dolynation-tlalli-infra/${{ github.sha }}/scripts/smoke-test.sh' \
+               -o /tmp/smoke-test.sh; \
+             chmod +x /tmp/smoke-test.sh; \
+             bash /tmp/smoke-test.sh '$API_URL' '$WEB_URL' '$EXPECTED_VERSION'"

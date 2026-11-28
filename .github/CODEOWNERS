@@ -3,17 +3,23 @@
 # Each line is a file pattern followed by one or more owners.
 # Order matters: later patterns override earlier ones.
 #
-# La protección de ramas exige 1 aprobación de cualquier persona con acceso,
-# NO de un CODEOWNER en particular: `require_code_owner_reviews` está en
-# `false`. Estos owner sirven para saber a quién pedir revisión.
+# La protección de ramas exige 1 aprobación (2 en `main`) y la revisión de al
+# menos un CODEOWNER (`require_code_owner_reviews` en `true`).
 #
-# Integrantes (ver docs/cronograma.md):
-#   - Jesús Alberto Villarrea Pérez  → @XxjesusalbertoxX  (SM / Lead Dev)
+# Cada ruta tiene DOS owners como mínimo: así ninguna PR puede quedarse sin
+# approving owner cuando quien la hace es el único responsable de esa ruta.
+#
+# Integrantes (ver plan/cronograma.md):
+#   - Jesús Alberto Villarreal Pérez → @XxjesusalbertoxX  (SM / Lead Dev)
 #   - Aozmar Azael García Candela    → @AzaelG26          (Backend principal)
 # ─────────────────────────────────────────────────────────────────────────
 
 # Default owners for everything in the repo
-* @XxjesusalbertoxX @AzaelG26
+* @XxjesusalbertoxX @AzaelG26 @EliasGalarza333
 
-# El schema SQL es crítico: lo revisa el owner del backend.
-/database/ @AzaelG26
+# El schema SQL es crítico: lo revisa el owner del backend y el SM.
+# (El repositorio es el dueño del schema; el backend lo replica con Drizzle.)
+/database/ @AzaelG26 @XxjesusalbertoxX
+
+# CI
+/.github/ @XxjesusalbertoxX @EliasGalarza333

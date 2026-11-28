@@ -6,7 +6,10 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_DATABASE}
-      POSTGRES_INITDB_ARGS: "-c max_connections=100"
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    # max_connections es un parámetro del SERVIDOR, no de `initdb`
+    # (initdb no acepta `-c`), por eso va en el comando del postgres.
+    command: ["postgres", "-c", "max_connections=100"]
     ports:
       - "${DB_PORT}:5432"
     volumes:

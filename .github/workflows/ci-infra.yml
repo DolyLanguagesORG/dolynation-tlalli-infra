@@ -8,11 +8,38 @@ on:
   push:
     branches: [develop, main]
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+
+  workflow-lint:
+    name: workflow-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # `actionlint` NO es una action de GitHub (no trae action.yaml) y las
+      # imagenes de Docker Hub estan bloqueadas para Actions, asi que se
+      # instala el binario con el script oficial del proyecto.
+      - name: Instalar actionlint
+        run: |
+          bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          chmod +x actionlint
+
+      # Valida la SINTAXIS de los workflows, que es mas estricta que YAML:
+      # claves duplicadas (GitHub rechaza el workflow entero y el run nace
+      # sin jobs), expresiones invalidas, `uses:` sin version, etc.
+      # `-shellcheck=` desactiva la integracion con shellcheck: aqui importa la
+      # sintaxis, no el estilo de los scripts.
+      - name: Validar los workflows del repo
+        run: ./actionlint -color -shellcheck= .github/workflows/*.yml
+
+
   compose-validate:
     name: compose-validate
     runs-on: ubuntu-latest
@@ -28,9 +55,170 @@ jobs:
       - name: Validar docker-compose.test.yml
         run: docker compose -f docker-compose.test.yml config
 
+      - name: Validar docker-compose.dev.yml
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dolynglish
+        run: docker compose -f docker-compose.dev.yml config
+
       - name: Validar docker-compose.prod.yml
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: dolynglish
         run: docker compose -f docker-compose.prod.yml config
+
+      - name: Test del regex de pr-labels
+        run: node .github/workflows/pr-labels.regex.test.cjs
+
+  schema-sql:
+    name: schema-sql
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dolynglish
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # El schema es la fuente de verdad de la base de datos: este job
+      # comprueba que `01-init.sql` es sintacticamente valido y se aplica
+      # sobre una base limpia.
+      #
+      # El schema vive en UN solo archivo mientras no haya datos de
+      # produccion. Cuando los haya, `01-init.sql` se congela y los cambios
+      # van en scripts incrementales idempotentes (ver conventions/database.md).
+      - name: Aplicar 01-init.sql
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d dolynglish \
+            -f database/postgres/01-init.sql
+
+      - name: Verificar el schema esperado
+        env:
+          PGPASSWORD: postgres
+        run: |
+          # El backend mapea estas tablas con Drizzle: si el schema no las
+          # tiene, la app arranca y revienta al primer query.
+          expected="roles users user_oauth_accounts user_settings auth_access_tokens auth_email_tokens access_requests readings friendships friend_invite_links user_blocks friend_streaks friend_streak_days reading_explanations prompt_logs moderated_categories category_daily_usage audit_logs error_logs billing_subscriptions billing_payments billing_webhook_events"
+          for t in $expected; do
+            if ! psql -qtA -v ON_ERROR_STOP=1 -h localhost -U postgres -d dolynglish \
+              -c "select 1 from pg_tables where tablename = '$t'" | grep -q 1; then
+              echo "::error::Falta la tabla '$t' en el schema."
+              exit 1
+            fi
+          done
+          echo "Las 22 tablas esperadas estan."
+
+      - uses: actions/checkout@v4
+        with:
+          repository: DolyLanguagesORG/dolynation-atl-back
+          ref: develop
+          path: .backend
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verificar paridad Drizzle schema.ts vs SQL
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: dolynglish
+        run: node scripts/check-schema-parity.mjs .backend/src/database/drizzle/schema.ts
+
+
+  # El runner del schema (`scripts/apply-schema.sh`) es lo que ejecuta cada
+  # deploy. Si se rompe, la base se queda con el schema viejo y el backend
+  # falla con HTTP 500. Este job lo prueba de punta a punta.
+  schema-runner:
+    name: schema-runner
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Un error de sintaxis en un script de deploy no se ve hasta que el
+      # deploy falla en el servidor: mejor revisarlo aqui.
+      - name: Sintaxis de los scripts de deploy
+        run: |
+          for f in scripts/*.sh; do
+            if ! bash -n "$f"; then
+              echo "::error::Error de sintaxis en $f"
+              exit 1
+            fi
+          done
+          echo "Sintaxis OK."
+
+      - name: El runner aplica, es idempotente y respeta los datos
+        run: |
+          set -euo pipefail
+          cat > /tmp/compose.yml <<EOF
+          name: schema-runner
+          services:
+            postgres:
+              image: postgres:15
+              container_name: schema-runner-db
+              environment:
+                POSTGRES_USER: postgres
+                POSTGRES_PASSWORD: postgres
+                POSTGRES_DB: dolynglish
+              volumes:
+                - runnerpg:/var/lib/postgresql/data
+                - $GITHUB_WORKSPACE/database/postgres:/docker-entrypoint-initdb.d:ro
+          volumes:
+            runnerpg:
+          EOF
+
+          export COMPOSE_FILE=/tmp/compose.yml
+          export SCHEMA_FILE="$GITHUB_WORKSPACE/database/postgres/01-init.sql"
+
+          echo "::group::1. Primera aplicacion: crea la base con el schema"
+          bash scripts/apply-schema.sh
+          echo "::endgroup::"
+
+          echo "::group::2. Segunda aplicacion: no debe tocar nada"
+          bash scripts/apply-schema.sh | tee /tmp/second.log
+          grep -q "no se toca la base" /tmp/second.log
+          echo "::endgroup::"
+
+          echo "::group::3. El schema cambio y no hay datos: se recrea"
+          printf '\n-- cambio de prueba (CI)\n' >> "$SCHEMA_FILE"
+          bash scripts/apply-schema.sh | tee /tmp/third.log
+          grep -q "Schema aplicado" /tmp/third.log
+          echo "::endgroup::"
+
+          echo "::group::4. El schema cambio y HAY datos: no debe borrar nada"
+          docker exec -i schema-runner-db sh -c \
+            'PGPASSWORD="$POSTGRES_PASSWORD" psql -qtA -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f -' <<'SQL'
+          INSERT INTO users (email, password, created_at) VALUES ('ci@dolynglish.test', 'x', NOW());
+          SQL
+          printf '\n-- otro cambio de prueba (CI)\n' >> "$SCHEMA_FILE"
+          if bash scripts/apply-schema.sh > /tmp/fourth.log 2>&1; then
+            echo "::error::El runner debio negarse a recrear una base con datos."
+            cat /tmp/fourth.log
+            exit 1
+          fi
+          grep -q "NO se recrea" /tmp/fourth.log
+          # El dato tiene que seguir ahi: el runner no toco la base.
+          docker exec schema-runner-db sh -c \
+            'PGPASSWORD="$POSTGRES_PASSWORD" psql -qtA -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT count(*) FROM users;"' \
+            | grep -qx 1
+          echo "::endgroup::"
+
+          echo "OK: el runner se comporta como debe."

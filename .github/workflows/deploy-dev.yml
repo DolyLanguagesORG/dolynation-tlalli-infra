@@ -1,0 +1,162 @@
+name: deploy-dev
+
+# Deploy del stack de desarrollo (Postgres + backend + frontend) al servidor.
+# Se dispara cuando cambia algo que afecta a DEV. `versions.yaml` (staging/prod)
+# queda fuera de forma intencional: NO es parte de este workflow.
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'docker-compose.dev.yml'
+      - 'scripts/**'
+      - 'database/**'
+      - '.env.dev.example'
+      - '.github/workflows/deploy-dev.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # GitHub actualiza el estado del deployment automaticamente; sin este
+  # permiso el GITHUB_TOKEN es de solo lectura y no puede reportarlo.
+  deployments: write
+
+concurrency:
+  group: deploy-dev-infra
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Desplegar stack de desarrollo
+    runs-on: ubuntu-latest
+    environment: desarrollo
+    # Un push hecho por el propio bot no debe re-disparar el deploy.
+    if: github.event_name == 'workflow_dispatch' || github.event.pusher.name != 'github-actions[bot]'
+    steps:
+      - name: Instalar llave SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KEY_PASSPHRASE: ${{ secrets.DEPLOY_SSH_KEY_PASSPHRASE }}
+          DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          # El agente SSH se creo en el paso anterior, en otro shell: hay que
+          # volver a cargarlo aqui para que `ssh` pueda usar la llave cifrada.
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+
+          if [ -z "${DEPLOY_SSH_KEY:-}" ] || [ -z "${DEPLOY_HOST:-}" ] || [ -z "${DEPLOY_PORT:-}" ]; then
+            echo "::error::Faltan secrets de despliegue (DEPLOY_SSH_KEY, DEPLOY_HOST, DEPLOY_PORT) en el environment 'desarrollo'."
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          # La llave es PEM y puede traer CRLF: se normaliza a LF.
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # La llave tiene passphrase y el runner no es interactivo, asi que
+          # ssh-add necesita un askpass que se la entregue.
+          #
+          # El agente y el askpass se dejan en ~/.ssh porque **cada paso del
+          # workflow corre en un shell nuevo**: lo que se exporta aqui no llega
+          # al paso siguiente. Los pasos que usan `ssh` vuelven a cargarlos con
+          # `. ~/.ssh/agent_env`.
+          if [ -n "${DEPLOY_SSH_KEY_PASSPHRASE:-}" ]; then
+            printf '%s\n' "$DEPLOY_SSH_KEY_PASSPHRASE" > ~/.ssh/deploy_passphrase
+            chmod 600 ~/.ssh/deploy_passphrase
+            printf '%s\n' '#!/usr/bin/env bash' 'cat ~/.ssh/deploy_passphrase' > ~/.ssh/askpass.sh
+            chmod 700 ~/.ssh/askpass.sh
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+            # ssh-agent -s imprime tambien un "echo Agent pid ..." que no es un
+            # comando valido como script: se filtran solo los export.
+            ssh-agent -s | grep '^SSH_AUTH_SOCK\|^SSH_AGENT_PID' > ~/.ssh/agent_env
+            . ~/.ssh/agent_env
+            if ! ssh-add ~/.ssh/deploy_key; then
+              echo "::error::No se pudo cargar la llave en el agente SSH. Revisa DEPLOY_SSH_KEY_PASSPHRASE."
+              exit 1
+            fi
+            echo "Llave cargada en el agente SSH."
+          fi
+
+          # La clave del host se fija por fingerprint: no se acepta la primera
+          # conexion a ciegas. Si el host cambia, hay que actualizar el secret.
+          # La clave del host ya no se acepta "a ciegas": se compara con la
+          # que esta en el secret DEPLOY_HOST_KEY. Si no coincide (el host
+          # cambio o hay un intermediario), el deploy se detiene.
+          ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" > /tmp/host_keys 2>&1 || true
+          if [ -n "${DEPLOY_HOST_KEY:-}" ]; then
+            if ! grep -qF "$DEPLOY_HOST_KEY" /tmp/host_keys; then
+              echo "::error::La clave del host no coincide con DEPLOY_HOST_KEY."
+              echo "::error::Si el host cambio de verdad, actualiza el secret antes de desplegar."
+              exit 1
+            fi
+          fi
+          if [ ! -s /tmp/host_keys ]; then
+            echo "::error::No se pudo obtener la clave del host $DEPLOY_HOST:$DEPLOY_PORT."
+            echo "::error::Detalle del escaneo:"
+            cat /tmp/host_keys
+            exit 1
+          fi
+          cat /tmp/host_keys >> ~/.ssh/known_hosts
+
+      - name: Escribir .env de la base de datos en el servidor
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          FRIEND_STREAK_CRON_ENABLED: ${{ vars.FRIEND_STREAK_CRON_ENABLED || 'true' }}
+          FRIEND_STREAK_CRON_EXPRESSION: ${{ vars.FRIEND_STREAK_CRON_EXPRESSION || '0 6 * * *' }}
+        run: |
+          set -euo pipefail
+          # El agente SSH se creo en el paso anterior, en otro shell: hay que
+          # volver a cargarlo aqui para que `ssh` pueda usar la llave cifrada.
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+          CONTENT="$(printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\nFRIEND_STREAK_CRON_ENABLED=%s\nFRIEND_STREAK_CRON_EXPRESSION=%s\n' \
+            "$POSTGRES_USER" "$POSTGRES_PASSWORD" "$POSTGRES_DB" \
+            "$FRIEND_STREAK_CRON_ENABLED" "$FRIEND_STREAK_CRON_EXPRESSION" | base64 -w0)"
+          echo "$CONTENT" | ssh -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT }}" \
+            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "umask 077 && base64 -d > '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/.env' && chmod 600 '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/.env'"
+
+      # El orden importa: primero se aplica el schema (que puede recrear la
+      # base) y despues se levanta el stack. Al revés, el backend arrancaria
+      # contra el schema viejo y fallaria con HTTP 500 en cuanto tocara una
+      # tabla nueva.
+      #
+      # `FORCE=1`: en desarrollo los datos son desechables, asi que si el
+      # schema cambio la base se recrea sin preguntar. En staging y produccion
+      # NO se usa: si la base tiene datos, el script se niega a borrarla.
+      - name: Actualizar infra y levantar el stack
+        run: |
+          set -euo pipefail
+          # El agente SSH se creo en el paso anterior, en otro shell: hay que
+          # volver a cargarlo aqui para que `ssh` pueda usar la llave cifrada.
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+          ssh -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT }}" \
+            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "set -e; cd '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra'; git fetch --prune origin; git reset --hard origin/develop; git clean -fdq; FORCE=1 bash scripts/apply-schema.sh; docker compose -f docker-compose.dev.yml up -d"
+

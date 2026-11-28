@@ -1,0 +1,318 @@
+name: deploy-prod
+
+# Despliega el ambiente de PRODUCCION.
+#
+# El environment `produccion` tiene required reviewers: GitHub PAUSA el
+# workflow antes de tocar el servidor y espera a que alguien lo apruebe. Es
+# el gate nativo de "esta publicacion sale ahora".
+#
+# El deploy nunca compila en el servidor: baja la imagen por SHA desde
+# GHCR. El SHA anterior queda registrado para poder hacer rollback.
+#
+# Ver operations/PLAN-DE-DESPLIEGUE.md.
+
+on:
+  # Produccion NO se despliega al empujar una rc: eso publicaria sin que
+  # nadie lo decidiera. Solo se despliega cuando alguien lo pide a mano
+  # (workflow_dispatch) y aprueba el environment `prod`.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag a desplegar (vacio = el del manifiesto)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  # Reporta el estado del deployment a GitHub.
+  deployments: write
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Desplegar el ambiente de produccion
+    runs-on: ubuntu-latest
+    # `prod` es el environment con los dos revisores (AzaelG26 y
+    # EliasGalarza333) y sin self-review. GitHub PAUSA el workflow aqui.
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar llave SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KEY_PASSPHRASE: ${{ secrets.DEPLOY_SSH_KEY_PASSPHRASE }}
+          DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          if [ -n "${DEPLOY_SSH_KEY_PASSPHRASE:-}" ]; then
+            printf '%s\n' "$DEPLOY_SSH_KEY_PASSPHRASE" > ~/.ssh/deploy_passphrase
+            chmod 600 ~/.ssh/deploy_passphrase
+            printf '%s\n' '#!/usr/bin/env bash' 'cat ~/.ssh/deploy_passphrase' > ~/.ssh/askpass.sh
+            chmod 700 ~/.ssh/askpass.sh
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+            ssh-agent -s | grep '^SSH_AUTH_SOCK\|^SSH_AGENT_PID' > ~/.ssh/agent_env
+            . ~/.ssh/agent_env
+            ssh-add ~/.ssh/deploy_key
+          fi
+
+          # La clave del host ya no se acepta "a ciegas": se compara con la
+          # que esta en el secret DEPLOY_HOST_KEY. Si no coincide (el host
+          # cambio o hay un intermediario), el deploy se detiene.
+          ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" > /tmp/host_keys 2>&1 || true
+          if [ -n "${DEPLOY_HOST_KEY:-}" ]; then
+            if ! grep -qF "$DEPLOY_HOST_KEY" /tmp/host_keys; then
+              echo "::error::La clave del host no coincide con DEPLOY_HOST_KEY."
+              echo "::error::Si el host cambio de verdad, actualiza el secret antes de desplegar."
+              exit 1
+            fi
+          fi
+          if [ ! -s /tmp/host_keys ]; then
+            echo "::error::No se pudo obtener la clave del host."
+            exit 1
+          fi
+          cat /tmp/host_keys >> ~/.ssh/known_hosts
+
+      - name: Subir los archivos del ambiente
+        # El servidor usa EXACTAMENTE los archivos del commit que se
+        # despliega (compose, scripts, manifiesto y schema). Asi no puede
+        # pasar que el servidor tenga una version vieja del compose o del
+        # manifiesto mientras el repo ya va en otro lado.
+        run: |
+          set -euo pipefail
+
+          # El manifiesto de versiones se toma de `develop`, que es donde lo
+          # mantiene `sync-versions`: la rc puede ser un commit anterior al
+          # ultimo aviso de release, y con el manifiesto viejo se desplegarian
+          # imagenes que ya no son.
+          curl -fsSL \
+            "https://raw.githubusercontent.com/DolyLanguagesORG/dolynation-tlalli-infra/develop/versions.yml" \
+            -o versions.yml
+
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+
+          # El tarball viaja por stdin del propio ssh. Con `scp` el archivo
+          # no llegaba al servidor (el comando salia con exito y el archivo no
+          # estaba), y el `tar` remoto fallaba con "No such file or
+          # directory".
+          tar -czf - \
+            docker-compose.env.yml \
+            docker-compose.site.yml \
+            versions.yml \
+            scripts \
+            database \
+            | ssh -i ~/.ssh/deploy_key \
+                -p "${{ secrets.DEPLOY_PORT }}" \
+                -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+                "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+                "mkdir -p '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra' && \
+                 tar -xzf - -C '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra' && \
+                 chmod +x '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra'/scripts/*.sh"
+
+      # La base la crea Postgres con POSTGRES_* y el backend conecta con la
+      # MISMA base: sus credenciales se derivan de ahi (ver
+      # docker-compose.env.yml). Los secrets DB_* ya no se usan, pero si
+      # alguien los define y **difieren** de POSTGRES_*, avisamos: es la
+      # causa de un 503 "Database is unreachable" sin explicacion.
+      - name: Avisar si las credenciales de la base no coinciden
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_DATABASE: ${{ secrets.DB_DATABASE }}
+        run: |
+          set -euo pipefail
+          if [ -n "$DB_USER" ] && [ "$DB_USER" != "$POSTGRES_USER" ]; then
+            echo "::warning::DB_USER no coincide con POSTGRES_USER. No se usa: el compose deriva del POSTGRES_USER."
+          fi
+          if [ -n "$DB_PASSWORD" ] && [ "$DB_PASSWORD" != "$POSTGRES_PASSWORD" ]; then
+            echo "::warning::DB_PASSWORD no coincide con POSTGRES_PASSWORD. No se usa: el compose deriva del POSTGRES_PASSWORD."
+          fi
+          if [ -n "$DB_DATABASE" ] && [ "$DB_DATABASE" != "$POSTGRES_DB" ]; then
+            echo "::warning::DB_DATABASE no coincide con POSTGRES_DB. No se usa: el compose deriva del POSTGRES_DB."
+          fi
+
+      - name: Escribir el .env del entorno
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+          MINIMAX_MODEL: ${{ secrets.MINIMAX_MODEL }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+          SMTP_FROM_NAME: ${{ secrets.SMTP_FROM_NAME }}
+          SMTP_SECURE: ${{ secrets.SMTP_SECURE }}
+          # IA y moderacion. Las keys son secrets; los parametros de
+          # configuracion son variables del environment (mismo nombre en todos
+          # los ambientes, distinto valor). Ver conventions/environment.md.
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AI_DEFAULT_PROVIDER: ${{ vars.AI_DEFAULT_PROVIDER }}
+          MINIMAX_REASONING_EFFORT: ${{ vars.MINIMAX_REASONING_EFFORT }}
+          GOOGLE_MODEL: ${{ vars.GOOGLE_MODEL }}
+          OPENAI_MODERATION_ENDPOINT: ${{ vars.OPENAI_MODERATION_ENDPOINT }}
+          OPENAI_MODERATION_MODEL: ${{ vars.OPENAI_MODERATION_MODEL }}
+          CATEGORY_MODERATION_ENABLED: ${{ vars.CATEGORY_MODERATION_ENABLED }}
+          CATEGORY_MODERATION_AI_ENABLED: ${{ vars.CATEGORY_MODERATION_AI_ENABLED }}
+          CATEGORY_MODERATION_AI_PROVIDER: ${{ vars.CATEGORY_MODERATION_AI_PROVIDER }}
+          CATEGORY_DAILY_LIMIT: ${{ vars.CATEGORY_DAILY_LIMIT }}
+          CATEGORY_MODERATION_SCORE_THRESHOLD: ${{ vars.CATEGORY_MODERATION_SCORE_THRESHOLD }}
+          CATEGORY_MODERATION_TIMEOUT_MS: ${{ vars.CATEGORY_MODERATION_TIMEOUT_MS }}
+          CATEGORY_MODERATION_CACHE_TTL_MS: ${{ vars.CATEGORY_MODERATION_CACHE_TTL_MS }}
+          JWT_ACCESS_TTL: ${{ vars.JWT_ACCESS_TTL }}
+          # Base publica del frontend: se usa para construir los enlaces de los
+          # correos de confirmacion y de restablecimiento de contrasena.
+          FRONTEND_BASE_URL: ${{ vars.FRONTEND_BASE_URL }}
+          # Exige confirmar el correo antes de poder iniciar sesion.
+          EMAIL_VERIFICATION_REQUIRED: ${{ vars.EMAIL_VERIFICATION_REQUIRED }}
+          # Pasarela de pagos (Stripe Sandbox / manual).
+          BILLING_PROVIDER: ${{ vars.BILLING_PROVIDER }}
+          BILLING_ENV_TAG: ${{ vars.BILLING_ENV_TAG }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_PUBLISHABLE_KEY: ${{ vars.STRIPE_PUBLISHABLE_KEY }}
+          STRIPE_CURRENCY: ${{ vars.STRIPE_CURRENCY }}
+          STRIPE_CHECKOUT_UI_MODE: ${{ vars.STRIPE_CHECKOUT_UI_MODE }}
+          STRIPE_PRICE_DOLLY: ${{ vars.STRIPE_PRICE_DOLLY }}
+          STRIPE_PRICE_DOLLY_PLUS: ${{ vars.STRIPE_PRICE_DOLLY_PLUS }}
+          STRIPE_PRICE_DOLLY_PRO: ${{ vars.STRIPE_PRICE_DOLLY_PRO }}
+          STRIPE_PRICE_LANGUAGE_UNLOCK: ${{ vars.STRIPE_PRICE_LANGUAGE_UNLOCK }}
+          # Autenticacion externa OAuth 2.0 / OIDC (Google y Microsoft Entra ID).
+          GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GOOGLE_OAUTH_REDIRECT_URI: ${{ vars.GOOGLE_OAUTH_REDIRECT_URI }}
+          MICROSOFT_OAUTH_CLIENT_ID: ${{ vars.MICROSOFT_OAUTH_CLIENT_ID }}
+          MICROSOFT_OAUTH_CLIENT_SECRET: ${{ secrets.MICROSOFT_OAUTH_CLIENT_SECRET }}
+          MICROSOFT_OAUTH_TENANT: ${{ vars.MICROSOFT_OAUTH_TENANT }}
+          MICROSOFT_OAUTH_REDIRECT_URI: ${{ vars.MICROSOFT_OAUTH_REDIRECT_URI }}
+          # Seguridad anti-bot (Cloudflare Turnstile) y CORS.
+          CAPTCHA_PROVIDER: ${{ vars.CAPTCHA_PROVIDER }}
+          CAPTCHA_SITE_KEY: ${{ vars.CAPTCHA_SITE_KEY }}
+          CAPTCHA_SECRET_KEY: ${{ secrets.CAPTCHA_SECRET_KEY }}
+          CAPTCHA_APPEARANCE: ${{ vars.CAPTCHA_APPEARANCE }}
+          CAPTCHA_ALLOWED_HOSTNAMES: ${{ vars.CAPTCHA_ALLOWED_HOSTNAMES }}
+          CAPTCHA_FAIL_OPEN: ${{ vars.CAPTCHA_FAIL_OPEN }}
+          CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+          FRIEND_STREAK_CRON_ENABLED: ${{ vars.FRIEND_STREAK_CRON_ENABLED || 'true' }}
+          FRIEND_STREAK_CRON_EXPRESSION: ${{ vars.FRIEND_STREAK_CRON_EXPRESSION || '0 6 * * *' }}
+          ACCESS_REQUESTS_ENABLED: ${{ vars.ACCESS_REQUESTS_ENABLED }}
+          ADMIN_NOTIFICATION_EMAIL: ${{ vars.ADMIN_NOTIFICATION_EMAIL }}
+        run: |
+          set -euo pipefail
+
+          # La llave del servidor tiene passphrase: el agente SSH es lo que
+          # permite usarla sin prompt. Sin esto, `ssh` falla con
+          # "Permission denied (publickey)".
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+
+          # El .env lo escribe el workflow, no lo genera el servidor: asi
+          # los secretos nunca pasan por un archivo en disco del servidor.
+          CONTENT="$(printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\nJWT_SECRET=%s\nJWT_ACCESS_TTL=%s\nAI_DEFAULT_PROVIDER=%s\nMINIMAX_API_KEY=%s\nMINIMAX_MODEL=%s\nMINIMAX_REASONING_EFFORT=%s\nGOOGLE_API_KEY=%s\nGOOGLE_MODEL=%s\nOPENAI_API_KEY=%s\nOPENAI_MODERATION_ENDPOINT=%s\nOPENAI_MODERATION_MODEL=%s\nCATEGORY_MODERATION_ENABLED=%s\nCATEGORY_MODERATION_AI_ENABLED=%s\nCATEGORY_MODERATION_AI_PROVIDER=%s\nCATEGORY_DAILY_LIMIT=%s\nCATEGORY_MODERATION_SCORE_THRESHOLD=%s\nCATEGORY_MODERATION_TIMEOUT_MS=%s\nCATEGORY_MODERATION_CACHE_TTL_MS=%s\nSMTP_HOST=%s\nSMTP_PORT=%s\nSMTP_USER=%s\nSMTP_PASSWORD=%s\nSMTP_FROM=%s\nSMTP_FROM_NAME=%s\nSMTP_SECURE=%s\nFRONTEND_BASE_URL=%s\nEMAIL_VERIFICATION_REQUIRED=%s\nBILLING_PROVIDER=%s\nBILLING_ENV_TAG=%s\nSTRIPE_SECRET_KEY=%s\nSTRIPE_WEBHOOK_SECRET=%s\nSTRIPE_PUBLISHABLE_KEY=%s\nSTRIPE_CURRENCY=%s\nSTRIPE_CHECKOUT_UI_MODE=%s\nSTRIPE_PRICE_DOLLY=%s\nSTRIPE_PRICE_DOLLY_PLUS=%s\nSTRIPE_PRICE_DOLLY_PRO=%s\nSTRIPE_PRICE_LANGUAGE_UNLOCK=%s\nGOOGLE_OAUTH_CLIENT_ID=%s\nGOOGLE_OAUTH_CLIENT_SECRET=%s\nGOOGLE_OAUTH_REDIRECT_URI=%s\nMICROSOFT_OAUTH_CLIENT_ID=%s\nMICROSOFT_OAUTH_CLIENT_SECRET=%s\nMICROSOFT_OAUTH_TENANT=%s\nMICROSOFT_OAUTH_REDIRECT_URI=%s\nCAPTCHA_PROVIDER=%s\nCAPTCHA_SITE_KEY=%s\nCAPTCHA_SECRET_KEY=%s\nCAPTCHA_APPEARANCE=%s\nCAPTCHA_ALLOWED_HOSTNAMES=%s\nCAPTCHA_FAIL_OPEN=%s\nCORS_ALLOWED_ORIGINS=%s\n' \
+            "$POSTGRES_USER" "$POSTGRES_PASSWORD" "$POSTGRES_DB" \
+            "$JWT_SECRET" \
+            "$JWT_ACCESS_TTL" "$AI_DEFAULT_PROVIDER" \
+            "$MINIMAX_API_KEY" "$MINIMAX_MODEL" "$MINIMAX_REASONING_EFFORT" \
+            "$GOOGLE_API_KEY" "$GOOGLE_MODEL" \
+            "$OPENAI_API_KEY" "$OPENAI_MODERATION_ENDPOINT" "$OPENAI_MODERATION_MODEL" \
+            "$CATEGORY_MODERATION_ENABLED" "$CATEGORY_MODERATION_AI_ENABLED" \
+            "$CATEGORY_MODERATION_AI_PROVIDER" "$CATEGORY_DAILY_LIMIT" \
+            "$CATEGORY_MODERATION_SCORE_THRESHOLD" "$CATEGORY_MODERATION_TIMEOUT_MS" \
+            "$CATEGORY_MODERATION_CACHE_TTL_MS" \
+            "$SMTP_HOST" "$SMTP_PORT" "$SMTP_USER" "$SMTP_PASSWORD" \
+            "$SMTP_FROM" "$SMTP_FROM_NAME" "$SMTP_SECURE" \
+            "$FRONTEND_BASE_URL" "$EMAIL_VERIFICATION_REQUIRED" \
+            "$BILLING_PROVIDER" "$BILLING_ENV_TAG" \
+            "$STRIPE_SECRET_KEY" "$STRIPE_WEBHOOK_SECRET" "$STRIPE_PUBLISHABLE_KEY" \
+            "$STRIPE_CURRENCY" "$STRIPE_CHECKOUT_UI_MODE" \
+            "$STRIPE_PRICE_DOLLY" "$STRIPE_PRICE_DOLLY_PLUS" "$STRIPE_PRICE_DOLLY_PRO" \
+            "$STRIPE_PRICE_LANGUAGE_UNLOCK" \
+            "$GOOGLE_OAUTH_CLIENT_ID" "$GOOGLE_OAUTH_CLIENT_SECRET" "$GOOGLE_OAUTH_REDIRECT_URI" \
+            "$MICROSOFT_OAUTH_CLIENT_ID" "$MICROSOFT_OAUTH_CLIENT_SECRET" "$MICROSOFT_OAUTH_TENANT" "$MICROSOFT_OAUTH_REDIRECT_URI" \
+            "$CAPTCHA_PROVIDER" "$CAPTCHA_SITE_KEY" "$CAPTCHA_SECRET_KEY" \
+            "$CAPTCHA_APPEARANCE" "$CAPTCHA_ALLOWED_HOSTNAMES" "$CAPTCHA_FAIL_OPEN" \
+            "$CORS_ALLOWED_ORIGINS" | base64 -w0)"
+          if [ -z "${ACCESS_REQUESTS_ENABLED:-}" ]; then
+            ACCESS_REQUESTS_ENABLED="false"
+          fi
+          CONTENT="$(
+            {
+              printf '%s' "$CONTENT" | base64 -d
+              printf 'FRIEND_STREAK_CRON_ENABLED=%s\nFRIEND_STREAK_CRON_EXPRESSION=%s\nACCESS_REQUESTS_ENABLED=%s\nADMIN_NOTIFICATION_EMAIL=%s\n' \
+                "$FRIEND_STREAK_CRON_ENABLED" "$FRIEND_STREAK_CRON_EXPRESSION" \
+                "$ACCESS_REQUESTS_ENABLED" "$ADMIN_NOTIFICATION_EMAIL"
+            } | base64 -w0
+          )"
+
+          echo "$CONTENT" | ssh -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT }}" \
+            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "umask 077 && base64 -d > '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/.env' && chmod 600 '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/.env'"
+      # Sin `SCHEMA_FORCE`: en produccion la base NUNCA se recrea si tiene
+      # datos. Si el schema cambio, el deploy se detiene y hay que migrar a
+      # mano (`database/postgres/updates/NN-*.sql`, fase 2).
+
+      - name: Desplegar
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if [ -f ~/.ssh/agent_env ]; then
+            . ~/.ssh/agent_env
+            export SSH_ASKPASS=~/.ssh/askpass.sh
+            export SSH_ASKPASS_REQUIRE=force
+            export DISPLAY=:0
+          fi
+
+          ssh -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT }}" \
+            -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "ORG_DIR='${{ secrets.ORG_PATH }}' \
+             COMPOSE_PROJECT_NAME=doly-prod \
+             DB_HOST_PORT=57030 BACKEND_HOST_PORT=57031 FRONTEND_HOST_PORT=57032 \
+             IMAGE_TAG='$TAG' \
+             bash '${{ secrets.ORG_PATH }}/dolynation-tlalli-infra/scripts/deploy-env.sh'"
+
+      - name: Verificar la version desplegada
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          VERSION="$(curl -fsSL https://raw.githubusercontent.com/DolyLanguagesORG/dolynation-tlalli-infra/develop/versions.yml \
+            | grep -E '^app_version:' | head -1 | cut -d: -f2 | tr -d ' \"')"
+
+          echo "Version del manifiesto: $VERSION"
+          echo "La verificacion del endpoint /api/v1/version la hace el smoke test."

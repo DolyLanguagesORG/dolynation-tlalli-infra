@@ -1,0 +1,41 @@
+# Imagen de los peers de servicio de la VPN de DolyNation.
+#
+# Cada servicio (devapi, devweb, minios) corre en su propio contenedor con:
+#   - su propia interfaz WireGuard (identidad criptografica propia),
+#   - su propia IP de tunel,
+#   - nginx con mTLS: pide un certificado de cliente firmado por la CA
+#     interna de DolyNation.
+#
+# Por que un contenedor por servicio y no un solo contenedor con varias
+# interfaces: cada servicio tiene su propia llave y su propio PSK. Si se
+# compromete uno, se revoca ese y los demas siguen intactos.
+#
+# La imagen se construye en el servidor (no en Docker Hub): el registro de
+# MinIO esta restringido y no hay una imagen publica equivalente.
+
+FROM alpine:3.20
+
+# wireguard-tools: el cliente de la VPN.
+# nginx: termina TLS con mTLS y hace de proxy hacia la aplicacion.
+# socat: reenvia el trafico hacia el contenedor de la aplicacion.
+# bash: wg-quick es un script de bash.
+RUN apk add --no-cache \
+      wireguard-tools \
+      nginx \
+      socat \
+      bash \
+      gettext \
+      iptables \
+      ca-certificates \
+ && update-ca-certificates
+
+# La interfaz WireGuard se crea dentro del contenedor con NET_ADMIN y
+# /dev/net/tun. El script de arranque la levanta y espera a que el hub
+# responda antes de abrir el puerto.
+
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY nginx.conf.template /etc/nginx/nginx.conf.template
+
+RUN chmod 0755 /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
