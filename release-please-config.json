@@ -3,7 +3,9 @@
   "packages": {
     ".": {
       "release-type": "simple",
-      "prerelease": false,
+      "draft": true,
+      "force-tag-creation": true,
+      "prerelease": true,
       "package-name": "dolynation-tlalli-infra",
       "changelog-path": "CHANGELOG.md",
       "include-component-in-tag": false,
